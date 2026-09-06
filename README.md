@@ -36,10 +36,12 @@ every result, so nobody builds on a search that did not happen.
 ## Install
 
 ```console
-$ cargo install cyberbrain-light
+$ cargo install --git https://github.com/bassprofressor-lab/cyberbrain-light
 $ cbl init
 $ cbl install          # writes the two hooks into .claude/settings.json
 ```
+
+Not on crates.io yet, so the install goes through git for now.
 
 Linux and Windows. Nothing is needed at runtime: no system SQLite, no OpenSSL, no model
 server, no node. `cbl install --undo` takes the hooks out again, and it never touches an
