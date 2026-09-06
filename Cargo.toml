@@ -1,0 +1,40 @@
+[package]
+name = "cyberbrain-light"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "FSL-1.1-ALv2"
+authors = ["Krynex Labs <info@krynexlabs.de>"]
+repository = "https://github.com/bassprofressor-lab/cyberbrain-light"
+homepage = "https://krynexlabs.de"
+description = "Cited, trust-tiered memory for AI coding agents. Lexical search, one small binary, no model to place and no compliance subsystem."
+keywords = ["ai-agents", "memory", "retrieval", "mcp", "markdown"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE.md"]
+
+[[bin]]
+name = "cbl"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.6", features = ["derive", "env"] }
+cyberbrain-core = "0.1.0"
+cyberbrain-index = "0.1.0"
+jiff = { version = "0.2.35", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+toml = "1.1.5"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+# Same reason as the full product: a hook must never take the agent down with it, which is
+# implemented by catching the panic and exiting 0. `abort` would leave nothing to catch.
+panic = "unwind"
