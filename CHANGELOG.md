@@ -10,9 +10,10 @@ date, so that date has to survive somewhere more durable than a tag that can be 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-09-07
 
-The first version. Not published yet: no tag, nothing on crates.io.
+The first version, on crates.io as `cyberbrain-light` and as a Linux and a Windows binary on
+the release page.
 
 - `init`, `write`, `scan`, `recall` (with `--id` to expand a citation), `forget`, `status`
   and `doctor`, all with `--json`.

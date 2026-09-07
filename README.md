@@ -36,12 +36,20 @@ every result, so nobody builds on a search that did not happen.
 ## Install
 
 ```console
-$ cargo install --git https://github.com/bassprofressor-lab/cyberbrain-light
+$ cargo install cyberbrain-light
 $ cbl init
 $ cbl install          # writes the two hooks into .claude/settings.json
 ```
 
-Not on crates.io yet, so the install goes through git for now.
+The crate is `cyberbrain-light`, the binary it puts on your path is `cbl`.
+
+Or take a binary from the [latest release](https://github.com/bassprofressor-lab/cyberbrain-light/releases/latest)
+and check it against the `SHA256SUMS` that ships beside it:
+
+```console
+$ sha256sum -c SHA256SUMS
+$ ./cbl-linux-x86_64 init
+```
 
 Linux and Windows. Nothing is needed at runtime: no system SQLite, no OpenSSL, no model
 server, no node. `cbl install --undo` takes the hooks out again, and it never touches an
