@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
 - **Built on Cyberbrain 0.7.10** (`cyberbrain-core`, `cyberbrain-index`), Rust 1.99.1,
   `cargo update`.
 - **An edit keeps what Light does not edit.** `cbl write` on an existing note set `retention` to
