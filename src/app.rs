@@ -169,7 +169,15 @@ impl App {
             updated: now,
             tags,
             links: link_targets(&req.body),
-            retention: None,
+            // What Light does not edit, it keeps. Before 0.2.0 an edit with `cbl write` set
+            // `retention` to nothing, and a store shared with the full Cyberbrain lost an
+            // agreed deletion date, a supersession or a validity window that way.
+            bereich: existing.as_ref().and_then(|n| n.front.bereich.clone()),
+            retention: existing.as_ref().and_then(|n| n.front.retention.clone()),
+            supersedes: existing.as_ref().map(|n| n.front.supersedes.clone()).unwrap_or_default(),
+            superseded_by: existing.as_ref().and_then(|n| n.front.superseded_by.clone()),
+            valid_from: existing.as_ref().and_then(|n| n.front.valid_from),
+            invalid_at: existing.as_ref().and_then(|n| n.front.invalid_at),
             pii: Default::default(),
         };
         let note = Note {

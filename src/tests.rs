@@ -64,6 +64,31 @@ fn rewriting_a_name_keeps_its_id_and_its_creation_date() {
     assert_eq!(app.index.stats().unwrap().notes, 1, "not a second note");
 }
 
+/// A store can be shared with the full Cyberbrain, which knows fields Light does not edit:
+/// a retention period, a department, a supersession, a validity window. An edit with
+/// `cbl write` must keep them. Before 0.2.0 it set `retention` to nothing on every edit.
+#[test]
+fn an_edit_keeps_the_fields_light_does_not_edit() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "pg18", "first body");
+    let mut note = app.store.read("pg18").unwrap();
+    let t = jiff::Timestamp::from_second(1_790_000_000).unwrap();
+    note.front.retention = Some("P2Y".into());
+    note.front.bereich = Some("betrieb".into());
+    note.front.supersedes = vec!["pg17".into()];
+    note.front.valid_from = Some(t);
+    app.store.write(&note).unwrap();
+
+    write(&mut app, 2, "pg18", "second body");
+    let after = app.store.read("pg18").unwrap();
+    assert!(after.body.contains("second body"));
+    assert_eq!(after.front.retention.as_deref(), Some("P2Y"));
+    assert_eq!(after.front.bereich.as_deref(), Some("betrieb"));
+    assert_eq!(after.front.supersedes, vec!["pg17".to_string()]);
+    assert_eq!(after.front.valid_from, Some(t));
+}
+
 #[test]
 fn moving_a_note_between_rings_is_refused_rather_than_done_quietly() {
     let (_d, root) = store(8192);

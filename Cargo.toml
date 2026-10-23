@@ -20,8 +20,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.6", features = ["derive", "env"] }
-cyberbrain-core = "0.1.0"
-cyberbrain-index = "0.1.0"
+cyberbrain-core = "0.7.10"
+cyberbrain-index = "0.7.10"
 jiff = { version = "0.2.35", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
