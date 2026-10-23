@@ -38,7 +38,7 @@ every result, so nobody builds on a search that did not happen.
 ```console
 $ cargo install cyberbrain-light
 $ cbl init
-$ cbl install          # writes the two hooks into .claude/settings.json
+$ cbl install          # writes the session-start hook into .claude/settings.json
 ```
 
 The crate is `cyberbrain-light`, the binary it puts on your path is `cbl`.
@@ -69,7 +69,7 @@ Four ways in, all from the same binary:
 | | |
 |---|---|
 | `cbl <command>` | `init`, `write`, `scan`, `recall`, `forget`, `status`, `doctor` — `--json` on all of them |
-| `cbl hook <event>` | `session-start` injects rings 0 and 1; `pre-compact` says what is about to be forgotten |
+| `cbl hook <event>` | `session-start` injects rings 0 and 1 (at most the 10,000 characters Claude Code shows, and names what did not fit); `pre-compact` is still accepted but no longer installed: Claude Code discards its message |
 | `cbl mcp` | Model Context Protocol over stdio: `recall`, `recall_id`, `write`, `status` |
 | `cbl install` | puts the hooks into a project's `.claude/settings.json`, and takes them out |
 

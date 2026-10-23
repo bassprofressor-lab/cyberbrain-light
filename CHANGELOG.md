@@ -10,6 +10,25 @@ date, so that date has to survive somewhere more durable than a tag that can be 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+- **Built on Cyberbrain 0.7.10** (`cyberbrain-core`, `cyberbrain-index`), Rust 1.99.1,
+  `cargo update`.
+- **An edit keeps what Light does not edit.** `cbl write` on an existing note set `retention` to
+  nothing, and the fields the full Cyberbrain writes (`bereich`, `supersedes`, `superseded_by`,
+  `valid_from`, `invalid_at`) were dropped. A store shared with Cyberbrain lost an agreed deletion
+  date or a supersession that way on every edit.
+- **MCP 2026-07-28.** The server answers `server/discover` and stateless requests (`resultType`,
+  `ttlMs`/`cacheScope`, `serverInfo` in `_meta`, `UnsupportedProtocolVersionError`), and
+  `initialize` with 2025-11-25. Claude Code 2.1.292 and later probe this first.
+- **Session start stays under 10,000 characters.** Claude Code shows a hook's context in full up
+  to that and only a 2,000 character preview past it, so rings 0 and 1 could be cut to a preview
+  while still under the token cap. Notes that do not fit are left out and named where the model
+  reads it.
+- **`cbl install` no longer writes the PreCompact hook** and takes out one an older version
+  wrote: Claude Code discards a PreCompact hook's `systemMessage`, so it reached nobody. The hook
+  it does write has a 30 s timeout (the harness default is 600 s).
+
 ## [0.1.0] - 2026-09-07
 
 The first version, on crates.io as `cyberbrain-light` and as a Linux and a Windows binary on

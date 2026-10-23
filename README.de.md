@@ -39,7 +39,7 @@ bei jedem Ergebnis, damit niemand auf eine Suche baut, die gar nicht stattgefund
 ```console
 $ cargo install cyberbrain-light
 $ cbl init
-$ cbl install          # schreibt die zwei Hooks in .claude/settings.json
+$ cbl install          # schreibt den Session-Start-Hook in .claude/settings.json
 ```
 
 Das Paket heißt `cyberbrain-light`, das Programm, das dabei in den Pfad kommt, heißt `cbl`.
@@ -70,7 +70,7 @@ Vier Wege hinein, alle aus derselben Binärdatei:
 | | |
 |---|---|
 | `cbl <befehl>` | `init`, `write`, `scan`, `recall`, `forget`, `status`, `doctor` — überall mit `--json` |
-| `cbl hook <ereignis>` | `session-start` speist Ring 0 und 1 ein, `pre-compact` sagt, was gleich vergessen wird |
+| `cbl hook <ereignis>` | `session-start` speist Ring 0 und 1 ein (höchstens die 10.000 Zeichen, die Claude Code zeigt, und nennt, was nicht passte); `pre-compact` wird noch angenommen, aber nicht mehr eingetragen: Claude Code verwirft seine Meldung |
 | `cbl mcp` | Model Context Protocol über stdio: `recall`, `recall_id`, `write`, `status` |
 | `cbl install` | setzt die Hooks in die `.claude/settings.json` eines Projekts und nimmt sie wieder heraus |
 

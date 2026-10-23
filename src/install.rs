@@ -1,5 +1,9 @@
-//! `cbl install`: put the two hook entries into a project's `.claude/settings.json`, and
-//! take them out again.
+//! `cbl install`: put the hook entry into a project's `.claude/settings.json`, and take it
+//! out again.
+//!
+//! Since 0.2.0 that is SessionStart only. The PreCompact entry spoke to the human through
+//! `systemMessage`, which Claude Code discards for that event: it did nothing. A run removes
+//! an entry an older version wrote there.
 //!
 //! The file belongs to the user, not to this tool. Everything that is not ours is copied
 //! through untouched, our entries are marked `_managedBy` so they can be found again, and a
@@ -10,10 +14,11 @@ use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 
 pub const MANAGED_BY: &str = "cyberbrain-light";
-const EVENTS: [(&str, &str); 2] = [
-    ("SessionStart", "session-start"),
-    ("PreCompact", "pre-compact"),
-];
+const EVENTS: [(&str, &str); 1] = [("SessionStart", "session-start")];
+/// Events an older version wrote an entry for and this one no longer does.
+const RETIRED: [&str; 1] = ["PreCompact"];
+/// Seconds before Claude Code gives up on the hook. Without it the harness waits 600 s.
+pub const HOOK_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug)]
 pub struct InstallReport {
@@ -62,6 +67,16 @@ pub fn run(project: &Path, undo: bool) -> Result<InstallReport> {
         .as_object_mut()
         .context("`hooks` in settings.json is not an object")?;
 
+    for harness_event in RETIRED {
+        if let Some(list) = hooks.get_mut(harness_event).and_then(Value::as_array_mut) {
+            let before = list.len();
+            list.retain(|v| v.get("_managedBy").and_then(Value::as_str) != Some(MANAGED_BY));
+            if list.len() < before {
+                report.removed.push(harness_event.to_string());
+            }
+        }
+    }
+
     for (harness_event, arg) in EVENTS {
         let list = hooks
             .entry(harness_event)
@@ -83,7 +98,7 @@ pub fn run(project: &Path, undo: bool) -> Result<InstallReport> {
         }
         let entry = json!({
             "matcher": "",
-            "hooks": [{ "type": "command", "command": binary, "args": ["hook", arg] }],
+            "hooks": [{ "type": "command", "command": binary, "args": ["hook", arg], "timeout": HOOK_TIMEOUT_SECS }],
             "_managedBy": MANAGED_BY,
         });
         let same = existing.as_ref() == Some(&entry);

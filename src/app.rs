@@ -174,8 +174,13 @@ impl App {
             // agreed deletion date, a supersession or a validity window that way.
             bereich: existing.as_ref().and_then(|n| n.front.bereich.clone()),
             retention: existing.as_ref().and_then(|n| n.front.retention.clone()),
-            supersedes: existing.as_ref().map(|n| n.front.supersedes.clone()).unwrap_or_default(),
-            superseded_by: existing.as_ref().and_then(|n| n.front.superseded_by.clone()),
+            supersedes: existing
+                .as_ref()
+                .map(|n| n.front.supersedes.clone())
+                .unwrap_or_default(),
+            superseded_by: existing
+                .as_ref()
+                .and_then(|n| n.front.superseded_by.clone()),
             valid_from: existing.as_ref().and_then(|n| n.front.valid_from),
             invalid_at: existing.as_ref().and_then(|n| n.front.invalid_at),
             pii: Default::default(),

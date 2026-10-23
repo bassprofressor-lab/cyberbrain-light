@@ -11,8 +11,18 @@ use serde_json::{Value, json};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
-pub const LATEST_PROTOCOL: &str = "2025-06-18";
-pub const SUPPORTED_PROTOCOLS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+/// Handshake-based revisions `initialize` answers in. Claude Code 2.1.292 and later fall back
+/// to `initialize` with 2025-11-25 when `server/discover` fails.
+pub const LATEST_PROTOCOL: &str = "2025-11-25";
+pub const SUPPORTED_PROTOCOLS: &[&str] = &["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
+/// Stateless revisions (0.2.0): every request names its version in `_meta`, every result
+/// carries `resultType`, the tool list `ttlMs`/`cacheScope`, and `server/discover` is required
+/// (MCP 2026-07-28).
+pub const MODERN_PROTOCOLS: &[&str] = &["2026-07-28"];
+const META_PROTOCOL: &str = "io.modelcontextprotocol/protocolVersion";
+const META_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
+const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32022;
+const LIST_TTL_MS: u64 = 3_600_000;
 
 const INSTRUCTIONS: &str = "Cyberbrain Light is this project's memory. Search it with \
     `recall` before reading files or guessing; every hit carries a citation such as \
@@ -60,6 +70,24 @@ impl Server {
         let params = msg.get("params").cloned().unwrap_or(json!({}));
         let is_notification = msg.get("id").is_none();
 
+        let modern = params
+            .get("_meta")
+            .and_then(|m| m.get(META_PROTOCOL))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        if (modern.is_some() || method == "server/discover") && !is_notification {
+            let response = match self.modern(method, &params, modern.as_deref()) {
+                Ok(value) => json!({ "jsonrpc": "2.0", "id": id, "result": value }),
+                Err((code, message, data)) => {
+                    let mut e = error_response(&id, code, &message);
+                    if let Some(d) = data {
+                        e["error"]["data"] = d;
+                    }
+                    e
+                }
+            };
+            return Some(response.to_string());
+        }
         let result = match method {
             "initialize" => Ok(self.initialize(&params)),
             "notifications/initialized" | "notifications/cancelled" => Ok(Value::Null),
@@ -77,6 +105,52 @@ impl Server {
         })
     }
 
+    /// One stateless request (2026-07-28). An unknown version gets
+    /// `UnsupportedProtocolVersionError` with the supported list, which is also how a probing
+    /// client learns this server is modern and retries instead of falling back.
+    fn modern(
+        &mut self,
+        method: &str,
+        params: &Value,
+        version: Option<&str>,
+    ) -> std::result::Result<Value, (i64, String, Option<Value>)> {
+        let mut supported: Vec<&str> = MODERN_PROTOCOLS.to_vec();
+        supported.extend_from_slice(SUPPORTED_PROTOCOLS);
+        if let Some(v) = version
+            && !MODERN_PROTOCOLS.contains(&v)
+        {
+            return Err((
+                UNSUPPORTED_PROTOCOL_VERSION,
+                "Unsupported protocol version".into(),
+                Some(json!({ "supported": supported, "requested": v })),
+            ));
+        }
+        let mut result = match method {
+            "server/discover" => json!({
+                "supportedVersions": supported,
+                "capabilities": { "tools": {} },
+                "instructions": INSTRUCTIONS,
+                "ttlMs": LIST_TTL_MS,
+                "cacheScope": "public",
+            }),
+            "tools/list" => {
+                let mut v = tool_list();
+                v["ttlMs"] = json!(LIST_TTL_MS);
+                v["cacheScope"] = json!("public");
+                v
+            }
+            "tools/call" => self.call(params).map_err(|(c, m)| (c, m, None))?,
+            "ping" => json!({}),
+            other => return Err((-32601, format!("unknown method `{other}`"), None)),
+        };
+        if let Some(o) = result.as_object_mut() {
+            o.insert("resultType".into(), json!("complete"));
+            let meta = o.entry("_meta").or_insert_with(|| json!({}));
+            meta[META_SERVER_INFO] = server_info();
+        }
+        Ok(result)
+    }
+
     fn initialize(&self, params: &Value) -> Value {
         let asked = params
             .get("protocolVersion")
@@ -90,11 +164,7 @@ impl Server {
         json!({
             "protocolVersion": version,
             "capabilities": { "tools": { "listChanged": false } },
-            "serverInfo": {
-                "name": "cyberbrain-light",
-                "title": "Cyberbrain Light",
-                "version": env!("CARGO_PKG_VERSION"),
-            },
+            "serverInfo": server_info(),
             "instructions": INSTRUCTIONS,
         })
     }
@@ -254,4 +324,12 @@ fn tool_list() -> Value {
 
 fn error_response(id: &Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
+}
+
+fn server_info() -> Value {
+    json!({
+        "name": "cyberbrain-light",
+        "title": "Cyberbrain Light",
+        "version": env!("CARGO_PKG_VERSION"),
+    })
 }

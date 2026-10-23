@@ -340,6 +340,47 @@ fn the_resident_cap_holds_and_is_reported() {
     );
 }
 
+/// 0.2.0: under the token cap is not enough. Claude Code shows `additionalContext` in full up
+/// to 10,000 characters and a 2,000 character preview past that, so the rings stop at the
+/// character limit, and what was left out is named where the model reads it.
+#[test]
+fn session_start_stays_under_the_characters_claude_code_shows() {
+    let (_d, root) = store(100_000);
+    let mut app = App::open(&root).unwrap();
+    for i in 0..8 {
+        write(
+            &mut app,
+            1,
+            &format!("protocol-{i}"),
+            &format!("Step {i}: {}", "keep it short. ".repeat(110)),
+        );
+    }
+    drop(app);
+    let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(
+        ctx.chars().count() <= 10_000,
+        "{} characters",
+        ctx.chars().count()
+    );
+    assert!(
+        ctx.contains("## r1 `protocol-0`"),
+        "the first notes are there"
+    );
+    assert!(
+        ctx.contains("Not shown") && ctx.contains("r1/protocol-7"),
+        "{ctx}"
+    );
+    assert!(
+        out.notes.iter().any(|n| n.contains("did not fit")),
+        "{:?}",
+        out.notes
+    );
+}
+
 #[test]
 fn a_hook_survives_a_payload_that_is_not_json() {
     let (_d, root) = store(8192);
@@ -382,7 +423,7 @@ fn install_keeps_what_it_did_not_write_and_undoes_only_its_own() {
     .unwrap();
 
     let r = install::run(dir.path(), false).unwrap();
-    assert_eq!(r.added.len(), 2);
+    assert_eq!(r.added.len(), 1);
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
     assert_eq!(v["permissions"]["allow"][0], "Bash(ls:*)");
     assert_eq!(
@@ -394,10 +435,10 @@ fn install_keeps_what_it_did_not_write_and_undoes_only_its_own() {
     // Running it twice changes nothing.
     let again = install::run(dir.path(), false).unwrap();
     assert!(again.added.is_empty());
-    assert_eq!(again.unchanged.len(), 2);
+    assert_eq!(again.unchanged.len(), 1);
 
     let undone = install::run(dir.path(), true).unwrap();
-    assert_eq!(undone.removed.len(), 2);
+    assert_eq!(undone.removed.len(), 1);
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
     assert_eq!(
         v["hooks"]["SessionStart"].as_array().unwrap().len(),
@@ -405,6 +446,38 @@ fn install_keeps_what_it_did_not_write_and_undoes_only_its_own() {
         "the foreign hook survives the undo"
     );
     assert!(v["hooks"]["PreCompact"].is_null());
+}
+
+/// 0.2.0: the PreCompact entry did nothing (Claude Code discards that event's
+/// `systemMessage`). A run takes out the one an older version wrote, leaves a foreign one,
+/// and writes a timeout on the SessionStart entry so a stuck hook cannot hold the session
+/// for the harness default of 600 s.
+#[test]
+fn install_retires_its_old_pre_compact_entry_and_sets_a_timeout() {
+    let dir = tempfile::tempdir().unwrap();
+    let settings = dir.path().join(".claude/settings.json");
+    std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    std::fs::write(
+        &settings,
+        r#"{"hooks":{"PreCompact":[
+            {"matcher":"","hooks":[{"type":"command","command":"/old/cbl","args":["hook","pre-compact"]}],"_managedBy":"cyberbrain-light"},
+            {"matcher":"","hooks":[{"type":"command","command":"/theirs"}]}]}}"#,
+    )
+    .unwrap();
+    let r = install::run(dir.path(), false).unwrap();
+    assert!(
+        r.removed.contains(&"PreCompact".to_string()),
+        "{:?}",
+        r.removed
+    );
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+    let pc = v["hooks"]["PreCompact"].as_array().unwrap();
+    assert_eq!(pc.len(), 1);
+    assert_eq!(pc[0]["hooks"][0]["command"], "/theirs");
+    assert_eq!(
+        v["hooks"]["SessionStart"][0]["hooks"][0]["timeout"],
+        install::HOOK_TIMEOUT_SECS
+    );
 }
 
 #[test]
@@ -521,6 +594,71 @@ fn mcp_answers_the_handshake_and_lists_four_tools() {
         .map(|t| t["name"].as_str().unwrap())
         .collect();
     assert_eq!(names, ["recall", "recall_id", "write", "status"]);
+}
+
+fn modern(id: u32, method: &str, version: &str, extra: &str) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"{method}","params":{{{extra}"_meta":{{"io.modelcontextprotocol/protocolVersion":"{version}","io.modelcontextprotocol/clientInfo":{{"name":"claude-code","version":"2.1.309"}},"io.modelcontextprotocol/clientCapabilities":{{}}}}}}}}"#
+    )
+}
+
+/// MCP 2026-07-28 (0.2.0): Claude Code 2.1.292+ probes `server/discover` first and stays
+/// stateless when it answers; no `initialize` at all.
+#[test]
+fn mcp_speaks_2026_07_28_without_a_handshake() {
+    let (_d, root) = store(8192);
+    let mut s = mcp_server(&root);
+    let d = rpc(&mut s, &modern(1, "server/discover", "2026-07-28", "")).unwrap();
+    let r = &d["result"];
+    assert_eq!(r["resultType"], "complete", "{d}");
+    assert!(
+        r["supportedVersions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "2026-07-28")
+    );
+    assert!(
+        r["supportedVersions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "2025-11-25")
+    );
+    assert_eq!(
+        r["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "cyberbrain-light"
+    );
+
+    let l = rpc(&mut s, &modern(2, "tools/list", "2026-07-28", "")).unwrap();
+    assert_eq!(l["result"]["resultType"], "complete");
+    assert!(l["result"]["ttlMs"].as_u64().unwrap() > 0);
+    assert_eq!(l["result"]["cacheScope"], "public");
+
+    let c = rpc(
+        &mut s,
+        &modern(
+            3,
+            "tools/call",
+            "2026-07-28",
+            r#""name":"status","arguments":{},"#,
+        ),
+    )
+    .unwrap();
+    assert_eq!(c["result"]["resultType"], "complete", "{c}");
+    assert_eq!(c["result"]["isError"], false, "{c}");
+
+    let bad = rpc(&mut s, &modern(4, "tools/list", "2099-01-01", "")).unwrap();
+    assert_eq!(bad["error"]["code"], -32022, "{bad}");
+    assert_eq!(bad["error"]["data"]["requested"], "2099-01-01");
+
+    // The fallback Claude Code uses when the probe fails is answered in kind.
+    let init = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":5,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}"#,
+    )
+    .unwrap();
+    assert_eq!(init["result"]["protocolVersion"], "2025-11-25");
 }
 
 #[test]

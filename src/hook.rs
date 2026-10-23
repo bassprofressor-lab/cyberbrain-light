@@ -100,7 +100,13 @@ pub fn run(event: HookEvent, store_root: &Path, stdin: &str) -> Result<HookOutpu
     }
 }
 
-/// Rings 0 and 1, rendered with their citations, cut at the token cap.
+/// Claude Code shows a hook's `additionalContext` in full up to 10,000 characters; past that
+/// the model gets a 2,000 character preview and a file path. Kept under it with room for the
+/// closing line that names what did not fit (0.2.0).
+const CONTEXT_CHAR_CAP: usize = 9_400;
+
+/// Rings 0 and 1, rendered with their citations, cut at the token cap and at the character
+/// cap, whichever comes first.
 ///
 /// Read straight from `notes/r0` and `notes/r1` rather than through `Store::list`, so the
 /// cost is bounded by the cap and not by the size of the store. An invariant that cannot be
@@ -112,6 +118,8 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
     let cap = app.store.resident_cap();
     let mut capped = false;
     let mut count = 0usize;
+    let mut chars = 0usize;
+    let mut too_long: Vec<String> = Vec::new();
 
     for ring in [Ring::Invariant, Ring::Protocol] {
         let dir = app.store.ring_dir(ring);
@@ -145,11 +153,10 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
                 capped = true;
                 continue;
             }
-            tokens += cost;
-            count += 1;
 
+            let mut piece = String::new();
             if out.is_empty() {
-                out.push_str(
+                piece.push_str(
                     "# Cyberbrain Light\n\nRings 0 and 1 are resident: they apply to \
                      everything in this project. Every block below carries its citation; \
                      quote it when you rely on it, and expand one with `cbl recall --id \
@@ -157,7 +164,7 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
                      which searches rings 2 to 4 by keyword.\n\n",
                 );
             }
-            out.push_str(&format!(
+            piece.push_str(&format!(
                 "## r{} `{}` ({})\n\n",
                 ring.as_u8(),
                 note.front.name,
@@ -165,11 +172,33 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
             ));
             let (blocks, _) = blocks_of(&note, MAX_BLOCK_TOKENS);
             for b in blocks {
-                out.push_str(&format!("[{}]\n{}\n\n", b.citation, b.text.trim()));
+                piece.push_str(&format!("[{}]\n{}\n\n", b.citation, b.text.trim()));
             }
+            if chars + piece.chars().count() > CONTEXT_CHAR_CAP {
+                too_long.push(format!("r{}/{}", ring.as_u8(), note.front.name));
+                continue;
+            }
+            chars += piece.chars().count();
+            tokens += cost;
+            count += 1;
+            out.push_str(&piece);
         }
     }
 
+    if !too_long.is_empty() {
+        // Said to the model, not only on stderr: an invariant it cannot see must at least
+        // be one it knows it is missing.
+        out.push_str(&format!(
+            "Not shown, because Claude Code shows at most 10,000 characters here: {}. \
+             Open them under notes/r0 and notes/r1 before acting on anything they might cover.\n",
+            too_long.join(", ")
+        ));
+        notes.push(format!(
+            "{} resident note(s) did not fit the 10,000 characters Claude Code shows: {}",
+            too_long.len(),
+            too_long.join(", ")
+        ));
+    }
     if capped {
         notes.push(format!(
             "the resident cap of {cap} tokens was reached; some notes in r0/r1 were not injected"
