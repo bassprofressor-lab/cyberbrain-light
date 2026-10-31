@@ -17,6 +17,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   came from outside. One overwrite, also by the model, turned an imported e-mail into a note
   like any other. Now tags left out stay; tags given replace the others, but `trust:untrusted`
   and the `src:` tags stay either way.
+- **`cbl scan` no longer drops a note it cannot read.** A note whose header Light refuses (a
+  typo, a field of a newer Cyberbrain) was taken out of the index although the file was still
+  there, and `doctor --fix` did the same; such a note keeps its place now, and `scan` and
+  `doctor` say it cannot be read. A note `.cyberbrainignore` hides still leaves the index, and
+  `scan` counts it as ignored instead of as removed.
 
 ## [0.2.0] - 2026-10-23
 

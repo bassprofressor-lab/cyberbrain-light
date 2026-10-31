@@ -140,7 +140,10 @@ fn an_edit_keeps_the_tags_and_never_drops_the_provenance() {
     assert!(tags.contains(&"trust:untrusted".to_string()), "{tags:?}");
     let hits = app.recall("rechnung sauber", 5, None).unwrap().hits;
     assert_eq!(hits.len(), 1);
-    assert!(hits[0].untrusted.is_some(), "recall still says where it came from");
+    assert!(
+        hits[0].untrusted.is_some(),
+        "recall still says where it came from"
+    );
 }
 
 #[test]
@@ -256,6 +259,64 @@ fn scan_is_incremental_and_notices_what_left() {
         1,
         "the link from `two` now points at nothing and says so"
     );
+}
+
+/// L3 (2026-10-31): a note `read_path` refuses — a typo in its header, a field of a newer
+/// Cyberbrain — was dropped from the index although the file is still there, so "skipped"
+/// meant "deleted". A note hidden by `.cyberbrainignore` leaves the index, but is said to be
+/// ignored, not to be gone.
+#[test]
+fn scan_keeps_an_unreadable_note_and_names_an_ignored_one() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "wichtig", "postgres läuft auf Port 5432.");
+    write(&mut app, 2, "altes-protokoll", "überholter stand");
+
+    let path = app.store.resolve("wichtig").unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        text.replacen("ring: 2", "ring: 2\nquelle: handbuch", 1),
+    )
+    .unwrap();
+    assert!(
+        app.store.read_path(&path).is_err(),
+        "the header is now unreadable"
+    );
+    std::fs::write(root.join(".cyberbrainignore"), "altes-protokoll.md\n").unwrap();
+
+    let report = app.scan(false).unwrap();
+    assert_eq!(report.removed, 0, "nothing left the tree");
+    assert_eq!(report.ignored, 1, "{:?}", report.skipped);
+    assert!(
+        report
+            .skipped
+            .iter()
+            .any(|s| s.contains("wichtig") && s.contains("kept")),
+        "{:?}",
+        report.skipped
+    );
+    assert!(path.is_file());
+    assert_eq!(
+        app.recall("postgres", 5, None).unwrap().hits.len(),
+        1,
+        "the unreadable note is still found"
+    );
+    assert!(app.recall("überholter", 5, None).unwrap().hits.is_empty());
+
+    // doctor says what is the case, and --fix does not make it worse.
+    let d = app.doctor(true).unwrap();
+    assert!(
+        d.findings.iter().any(|f| f.contains("cannot be read")),
+        "{:?}",
+        d.findings
+    );
+    assert!(
+        !d.findings.iter().any(|f| f.contains("no longer exist")),
+        "{:?}",
+        d.findings
+    );
+    assert_eq!(app.recall("postgres", 5, None).unwrap().hits.len(), 1);
 }
 
 #[test]

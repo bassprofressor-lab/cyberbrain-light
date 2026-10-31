@@ -237,9 +237,10 @@ impl App {
             let mut note = match self.store.read_path(&entry.path) {
                 Ok(n) => n,
                 Err(e) => {
-                    report
-                        .skipped
-                        .push(format!("{}: {e}", entry.path.display()));
+                    report.skipped.push(format!(
+                        "{}: {e} (kept in the index as it was; fix the file and scan again)",
+                        entry.path.display()
+                    ));
                     continue;
                 }
             };
@@ -280,10 +281,28 @@ impl App {
             report.blocks += outcome.blocks;
         }
 
-        // Notes that left the tree leave the index with them.
+        // Notes that left the tree leave the index with them. Only those (L3, 2026-10-31): a
+        // note that is listed but could not be read is still there, and dropping its rows
+        // turned "skipped" into "deleted" — the full product looks at the file before a row
+        // goes, and so does this. A note `.cyberbrainignore` hides leaves the index, which is
+        // what the file is for, and is counted as ignored rather than as gone.
+        let listed: HashSet<PathBuf> = listing
+            .entries
+            .iter()
+            .map(|e| self.on_disk(&e.path))
+            .collect();
         for record in self.index.notes()? {
-            if !seen.contains(&record.front.id) {
-                self.index.delete_note(&record.front.id)?;
+            if seen.contains(&record.front.id) {
+                continue;
+            }
+            let path = self.on_disk(&record.path);
+            if listed.contains(&path) {
+                continue;
+            }
+            self.index.delete_note(&record.front.id)?;
+            if path.is_file() {
+                report.ignored += 1;
+            } else {
                 report.removed += 1;
             }
         }
@@ -380,24 +399,40 @@ impl App {
         let mut findings = self.index.integrity()?;
         let listing = self.store.list()?;
 
-        let indexed: HashSet<NoteId> = self
-            .index
-            .notes()?
-            .into_iter()
-            .map(|n| n.front.id)
-            .collect();
         let mut on_disk: HashSet<NoteId> = HashSet::new();
         let mut drifted = 0usize;
+        let mut unreadable: HashSet<PathBuf> = HashSet::new();
         for entry in &listing.entries {
-            if let Ok(note) = self.store.read_path(&entry.path) {
-                on_disk.insert(note.front.id);
-                match self.index.fingerprint(&note.front.id)? {
-                    Some((hash, _)) if hash == content_hash(&note) => {}
-                    _ => drifted += 1,
+            match self.store.read_path(&entry.path) {
+                Ok(note) => {
+                    on_disk.insert(note.front.id);
+                    match self.index.fingerprint(&note.front.id)? {
+                        Some((hash, _)) if hash == content_hash(&note) => {}
+                        _ => drifted += 1,
+                    }
+                }
+                Err(_) => {
+                    unreadable.insert(self.on_disk(&entry.path));
                 }
             }
         }
-        let orphaned = indexed.difference(&on_disk).count();
+        // A row whose note is listed but unreadable is not an orphan: the file is there, and
+        // `scan` keeps the row until it can be read again (L3).
+        let orphaned = self
+            .index
+            .notes()?
+            .into_iter()
+            .filter(|r| {
+                !on_disk.contains(&r.front.id) && !unreadable.contains(&self.on_disk(&r.path))
+            })
+            .count();
+        if !unreadable.is_empty() {
+            findings.push(format!(
+                "{} note(s) cannot be read; they keep their place in the index until fixed \
+                 (`cbl scan` names them)",
+                unreadable.len()
+            ));
+        }
         if drifted > 0 {
             findings.push(format!("{drifted} note(s) on disk differ from the index"));
         }
@@ -427,6 +462,16 @@ impl App {
             findings,
             repaired,
         })
+    }
+
+    /// A path from the listing or from the index, as the file it names. The index may hold
+    /// it relative to the store root.
+    fn on_disk(&self, path: &Path) -> PathBuf {
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.store.root().join(path)
+        }
     }
 
     fn db_bytes(&self) -> u64 {
@@ -491,6 +536,7 @@ pub struct ScanReport {
     pub updated: usize,
     pub unchanged: usize,
     pub removed: usize,
+    pub ignored: usize,
     pub blocks: usize,
     pub oversized: usize,
     pub links_written_back: usize,

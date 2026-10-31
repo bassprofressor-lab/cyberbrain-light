@@ -62,6 +62,12 @@ pub fn scan_text(r: &ScanReport) -> String {
         "{} added, {} updated, {} unchanged, {} removed; {} block(s) in {} ms",
         r.added, r.updated, r.unchanged, r.removed, r.blocks, r.ms
     );
+    if r.ignored > 0 {
+        out.push_str(&format!(
+            "\n{} note(s) left the index because .cyberbrainignore hides them",
+            r.ignored
+        ));
+    }
     if r.links_written_back > 0 {
         out.push_str(&format!(
             "\nlinks written back into {} note(s)",
