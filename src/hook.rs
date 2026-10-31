@@ -101,9 +101,50 @@ pub fn run(event: HookEvent, store_root: &Path, stdin: &str) -> Result<HookOutpu
 }
 
 /// Claude Code shows a hook's `additionalContext` in full up to 10,000 characters; past that
-/// the model gets a 2,000 character preview and a file path. Kept under it with room for the
-/// closing line that names what did not fit (0.2.0).
+/// the model gets a 2,000 character preview and a file path (0.2.0).
+const CLAUDE_CODE_CHARS: usize = 10_000;
+/// What the notes themselves may take of that. The rest is the closing line.
 const CONTEXT_CHAR_CAP: usize = 9_400;
+/// How many characters of note names the closing line spells out; past that it counts them.
+/// Before (L5, 2026-10-31) it named all of them, uncounted, and eight long names took the
+/// context past 10,000 characters.
+const TRAILER_NAMES_CHARS: usize = 400;
+const TRAILER_HEAD: &str = "Not shown, because Claude Code shows at most 10,000 characters here: ";
+const TRAILER_TAIL: &str =
+    ". Open them under notes/r0 and notes/r1 before acting on anything they might cover.\n";
+/// " and 99999 more" is the longest the count can be.
+const _: () = assert!(
+    CONTEXT_CHAR_CAP
+        + TRAILER_HEAD.len()
+        + TRAILER_NAMES_CHARS
+        + " and 99999 more".len()
+        + TRAILER_TAIL.len()
+        <= CLAUDE_CODE_CHARS,
+    "the closing line does not fit beside the notes"
+);
+
+/// The line that names the resident notes left out, at most [`TRAILER_NAMES_CHARS`] of names.
+fn trailer(left_out: &[String]) -> String {
+    let mut shown: Vec<&str> = Vec::new();
+    let mut len = 0usize;
+    for name in left_out {
+        let add = name.chars().count() + if shown.is_empty() { 0 } else { 2 };
+        if len + add > TRAILER_NAMES_CHARS {
+            break;
+        }
+        len += add;
+        shown.push(name);
+    }
+    let rest = left_out.len() - shown.len();
+    let more = if rest == 0 {
+        String::new()
+    } else if shown.is_empty() {
+        format!("{rest} note(s)")
+    } else {
+        format!(" and {rest} more")
+    };
+    format!("{TRAILER_HEAD}{}{more}{TRAILER_TAIL}", shown.join(", "))
+}
 
 /// Rings 0 and 1, rendered with their citations, cut at the token cap and at the character
 /// cap, whichever comes first.
@@ -184,11 +225,7 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
     if !too_long.is_empty() {
         // Said to the model, not only on stderr: an invariant it cannot see must at least
         // be one it knows it is missing.
-        out.push_str(&format!(
-            "Not shown, because Claude Code shows at most 10,000 characters here: {}. \
-             Open them under notes/r0 and notes/r1 before acting on anything they might cover.\n",
-            too_long.join(", ")
-        ));
+        out.push_str(&trailer(&too_long));
         notes.push(format!(
             "{} resident note(s) did not fit the 10,000 characters Claude Code shows: {}",
             too_long.len(),

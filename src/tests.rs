@@ -523,6 +523,41 @@ fn session_start_stays_under_the_characters_claude_code_shows() {
     );
 }
 
+/// L5 (2026-10-31): the closing line that names what did not fit was appended after the
+/// character check and not counted. One large note just under the cap and eight left-out
+/// notes with long names took the context to 10,373 characters, past what Claude Code shows.
+#[test]
+fn the_closing_line_counts_against_the_character_cap() {
+    let (_d, root) = store(100_000);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "gross", &"x".repeat(8_850));
+    for i in 0..8 {
+        let name = format!("protokoll-{i}-{}", "lang".repeat(25));
+        assert!(name.len() >= 110);
+        write(
+            &mut app,
+            1,
+            &name,
+            &format!("Schritt {i}. {}", "kurz. ".repeat(40)),
+        );
+    }
+    drop(app);
+    let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(
+        ctx.chars().count() <= 10_000,
+        "{} characters",
+        ctx.chars().count()
+    );
+    assert!(
+        ctx.contains("Not shown"),
+        "and it still says what is missing"
+    );
+}
+
 #[test]
 fn a_hook_survives_a_payload_that_is_not_json() {
     let (_d, root) = store(8192);

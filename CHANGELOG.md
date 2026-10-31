@@ -25,6 +25,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 - **The session-start hook honours `.cyberbrainignore`.** It read rings 0 and 1 straight from
   their directories, so a resident note the operator had hidden was still injected into every
   session while `cbl status` no longer counted it.
+- **Session start really stays under 10,000 characters.** The closing line that names the
+  resident notes left out was added after the count, with every name in it, and a large note
+  plus a few long names took the context past what Claude Code shows. The line now counts, and
+  past 400 characters of names it gives the number of the rest.
 
 ## [0.2.0] - 2026-10-23
 
