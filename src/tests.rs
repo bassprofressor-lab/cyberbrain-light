@@ -1115,3 +1115,51 @@ fn an_agent_at_the_command_line_is_told_by_its_environment() {
         1
     );
 }
+
+// ----- workflows ----------------------------------------------------------------------
+
+/// The workflows, read as text. `None` where they do not exist, which is the crate as
+/// published: it ships `src/` and not `.github/`.
+fn workflow(name: &str) -> Option<String> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".github/workflows")
+        .join(name);
+    std::fs::read_to_string(path).ok()
+}
+
+/// L9 (2026-10-31): actions were referenced by tag (`@v7`, `@stable`), which whoever controls
+/// the action can move, and the release workflow gave its build job — the one running those
+/// actions — a token that writes to the repository.
+#[test]
+fn every_action_is_pinned_and_only_publish_may_write() {
+    for name in ["ci.yml", "release.yml"] {
+        let Some(text) = workflow(name) else { continue };
+        for line in text
+            .lines()
+            .filter(|l| l.trim_start().starts_with("- uses:"))
+        {
+            let reference = line
+                .split('@')
+                .nth(1)
+                .and_then(|r| r.split_whitespace().next())
+                .unwrap_or("");
+            assert!(
+                reference.len() == 40 && reference.chars().all(|c| c.is_ascii_hexdigit()),
+                "{name}: not pinned to a commit: {}",
+                line.trim()
+            );
+        }
+        for (i, _) in text.match_indices("contents: write") {
+            let job = text[..i]
+                .lines()
+                .rev()
+                .find(|l| l.starts_with("  ") && !l.starts_with("   ") && l.ends_with(':'))
+                .unwrap_or("");
+            assert_eq!(
+                job.trim(),
+                "publish:",
+                "{name}: a write token outside publish"
+            );
+        }
+    }
+}

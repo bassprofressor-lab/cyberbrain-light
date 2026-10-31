@@ -50,6 +50,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   first one's; `cbl doctor` then found the store out of step. `write`, `scan` and `forget` now
   take a lock on the store (`.cyberbrain/.light.lock`), and the second write updates the note
   the first one created.
+- **The release workflow is harder to tamper with.** Every action is pinned to a commit
+  instead of a tag that can be moved (Dependabot keeps the pins current), only the job that
+  attaches the files to the release may write to the repository, and the release build no
+  longer uses the build cache it shares with ordinary CI runs.
 
 ## [0.2.0] - 2026-10-23
 

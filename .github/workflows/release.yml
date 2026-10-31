@@ -10,8 +10,13 @@ on:
   # exercised at the worst possible moment.
   workflow_dispatch:
 
+# Read-only by default (L9, 2026-10-31). The build job runs third-party actions and
+# compiles the code; with a write token there, a compromised action could have replaced the
+# binary and its checksum on the release. Only `publish` writes, and runs nothing it builds.
+# Every action is pinned to a commit, not to a tag that can be moved; Dependabot keeps the
+# pins current.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -28,9 +33,11 @@ jobs:
             name: windows-x86_64
             bin: cbl.exe
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      # No rust-cache here, as in the full product: the cache is shared with ordinary CI
+      # runs, and whatever one of them put in it would end up in the binary people download.
+      # A release builds from nothing.
 
       - name: build the binary
         run: cargo build --release
@@ -70,7 +77,7 @@ jobs:
           if command -v sha256sum > /dev/null; then sha256sum * > "SHA256SUMS-${{ matrix.name }}"; else shasum -a 256 * > "SHA256SUMS-${{ matrix.name }}"; fi
           cat "SHA256SUMS-${{ matrix.name }}"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.name }}
           path: dist/*
@@ -80,8 +87,10 @@ jobs:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
       - name: one directory, one checksum file
@@ -92,7 +101,7 @@ jobs:
           ls -la out
       # A draft, not a publish: the release notes are written by a person, and the tag
       # existing is not the same as the release being ready to read.
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           draft: true
           files: out/*
