@@ -199,7 +199,9 @@ impl Server {
         };
         match name {
             "recall" => {
-                let app = App::open(root)?;
+                // Whoever calls a tool here is the model (L12).
+                let mut app = App::open(root)?;
+                app.agent = true;
                 let n = args.get("n").and_then(Value::as_u64).unwrap_or(8) as usize;
                 let ring = match args.get("ring") {
                     None | Some(Value::Null) => None,
@@ -288,7 +290,7 @@ fn tool_list() -> Value {
                 "properties": {
                     "query": { "type": "string", "description": "the question, in the words a note would use" },
                     "n": { "type": "integer", "description": "hits to return (default 8)" },
-                    "ring": { "type": "integer", "description": "restrict to exactly this ring" },
+                    "ring": { "type": "integer", "description": "restrict to exactly this ring; 0 or 1 to search the rings already in the session context" },
                 },
                 "required": ["query"],
             },

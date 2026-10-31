@@ -32,6 +32,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 - **MCP refuses a ring that does not exist.** `ring: 258` was taken as ring 2 and `259` as
   ring 3, so a slip of the model wrote into a ring it had not meant. Anything but 0 to 4 is now
   an error the model is shown.
+- **`recall` searches rings 2 to 4 when an agent asks**, which is what the MCP tool and the
+  session-start text always said. Both returned rings 0 and 1 as well, usually first: a second
+  copy of what the agent was given at session start. The MCP `recall`, and `cbl recall` run by
+  an agent (`CLAUDECODE` or `CYBERBRAIN_AGENT` set), now leave them out and say so; `--ring 0`
+  or `--ring 1` still searches them, and a person at the terminal still gets every ring. The
+  full Cyberbrain draws the line in the same place.
 
 ## [0.2.0] - 2026-10-23
 

@@ -146,7 +146,8 @@ fn run(cli: Cli) -> Result<()> {
 
         Cmd::Recall { query, id, n, ring } => {
             let root = find_store(cli.store, &cwd)?;
-            let app = App::open(&root)?;
+            let mut app = App::open(&root)?;
+            app.agent = app::agent_from_env(|k| std::env::var(k).ok());
             match (id, query) {
                 (Some(citation), _) => {
                     let e = app.expand(&citation)?;

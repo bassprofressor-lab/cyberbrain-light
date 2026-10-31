@@ -88,7 +88,10 @@ Notizen liegen in nummerierten Ringen, und die Nummer ist eine Aussage über Ver
 
 Ring 0 und 1 fahren in jeder Sitzung mit, gedeckelt über ein Token-Budget, damit der Agent die
 Regeln kennt, statt sie neu zu entdecken. Sie gehören dir: das MCP-Werkzeug `write` weist sie
-ab und sagt, man solle den Text vorschlagen.
+ab und sagt, man solle den Text vorschlagen. Weil der Agent sie schon hat, lässt `recall` sie
+weg, wenn ein Agent fragt (das MCP-Werkzeug oder `cbl recall` mit gesetztem `CLAUDECODE` oder
+`CYBERBRAIN_AGENT`), und sagt das dazu; `--ring 0` oder `--ring 1` durchsucht sie trotzdem. An
+deinem eigenen Terminal bekommst du alle Ringe.
 
 ## Was es kostet
 

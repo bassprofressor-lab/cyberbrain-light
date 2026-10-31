@@ -95,6 +95,21 @@ pub struct App {
     pub store: Store,
     pub index: Index,
     pub cfg: LightConfig,
+    /// Whether an agent is asking rather than a person (L12, 2026-10-31). An agent's session
+    /// start injected rings 0 and 1 whole, so `recall` leaves them out for it: a hit from them
+    /// is a second copy of its own context. A person has no such context and gets them.
+    /// `--ring 0|1` searches them either way. The full Cyberbrain decides it the same way.
+    pub agent: bool,
+}
+
+/// Who is at this command line, the way the full Cyberbrain tells it: Claude Code sets
+/// `CLAUDECODE` for the commands it runs, and `CYBERBRAIN_AGENT` lets any other harness say
+/// the same. Attribution for the ordinary course of work, not a boundary: an agent controls
+/// its own environment.
+pub fn agent_from_env(var: impl Fn(&str) -> Option<String>) -> bool {
+    ["CLAUDECODE", "CYBERBRAIN_AGENT"]
+        .iter()
+        .any(|k| var(k).is_some_and(|v| !v.trim().is_empty()))
 }
 
 impl App {
@@ -105,7 +120,12 @@ impl App {
             .with_context(|| format!("opening the store at {}", root.display()))?;
         let index = Index::open(&store.db_path())
             .with_context(|| format!("opening the index at {}", store.db_path().display()))?;
-        Ok(Self { store, index, cfg })
+        Ok(Self {
+            store,
+            index,
+            cfg,
+            agent: false,
+        })
     }
 
     /// Create the layout and the config, then open it. Running it twice is not an error and
@@ -122,7 +142,15 @@ impl App {
             cfg.write(root)?;
         }
         let index = Index::open(&store.db_path())?;
-        Ok((Self { store, index, cfg }, existed))
+        Ok((
+            Self {
+                store,
+                index,
+                cfg,
+                agent: false,
+            },
+            existed,
+        ))
     }
 
     // ----- write ---------------------------------------------------------------------
@@ -321,6 +349,7 @@ impl App {
             // No embedder exists in this product, so no candidates are asked for.
             k_sem: 0,
             ring,
+            skip_resident: self.agent,
             ..RecallOptions::default()
         };
         let mut result = self.index.recall(query, None, &opts)?;

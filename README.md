@@ -87,7 +87,10 @@ Notes live in numbered rings, and the number is a claim about trust.
 
 Rings 0 and 1 ride along in every session under a token cap, so the agent starts knowing the
 rules instead of rediscovering them. They belong to you: the MCP `write` tool refuses them,
-and says to propose the text instead.
+and says to propose the text instead. Because the agent already holds them, `recall` leaves
+them out when an agent asks (the MCP tool, or `cbl recall` with `CLAUDECODE` or
+`CYBERBRAIN_AGENT` set) and says so; `--ring 0` or `--ring 1` searches them anyway. At your
+own terminal you get every ring.
 
 ## What it costs
 

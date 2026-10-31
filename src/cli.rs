@@ -63,7 +63,8 @@ pub enum Cmd {
         #[arg(long)]
         full: bool,
     },
-    /// Search the store.
+    /// Search the store. Run by an agent (`CLAUDECODE` or `CYBERBRAIN_AGENT` set), rings 2
+    /// to 4: rings 0 and 1 are in its session already. `--ring 0|1` searches them.
     Recall {
         /// The query. Omit when using --id.
         query: Option<String>,

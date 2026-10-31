@@ -928,3 +928,84 @@ fn mcp_refuses_a_ring_out_of_range_instead_of_wrapping_it() {
     let text = r["result"]["content"][0]["text"].as_str().unwrap();
     assert!(text.contains("0 to 4"), "{text}");
 }
+
+/// L12 (2026-10-31): the MCP `recall` says "keyword search over rings 2 to 4", and the
+/// session-start text says the same of `cbl recall`, but both answered from rings 0 and 1
+/// too — a second copy of what the agent already holds, ranked first. As in the full product:
+/// an agent gets rings 2 to 4 and a caveat that says so, `ring` 0 or 1 still searches them.
+#[test]
+fn mcp_recall_searches_rings_2_to_4_unless_asked_for_a_resident_ring() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(
+        &mut app,
+        0,
+        "wolfpack-regel",
+        "wolfpack bleibt abgeschaltet.",
+    );
+    write(
+        &mut app,
+        2,
+        "wolfpack-stand",
+        "wolfpack wurde abgeschaltet.",
+    );
+    drop(app);
+    let mut s = mcp_server(&root);
+    let r = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"recall","arguments":
+            {"query":"wolfpack abgeschaltet"}}}"#,
+    )
+    .unwrap();
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("wolfpack-stand"), "{text}");
+    assert!(!text.contains("wolfpack-regel"), "{text}");
+    assert!(text.contains("rings 0/1"), "and says why: {text}");
+
+    let r0 = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"recall","arguments":
+            {"query":"wolfpack abgeschaltet","ring":0}}}"#,
+    )
+    .unwrap();
+    let text = r0["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("wolfpack-regel"), "{text}");
+}
+
+#[test]
+fn an_agent_at_the_command_line_is_told_by_its_environment() {
+    use crate::app::agent_from_env;
+    let env = |pairs: &'static [(&'static str, &'static str)]| {
+        move |k: &str| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v.to_string())
+        }
+    };
+    assert!(agent_from_env(env(&[("CLAUDECODE", "1")])));
+    assert!(agent_from_env(env(&[("CYBERBRAIN_AGENT", "seo")])));
+    assert!(!agent_from_env(env(&[("CLAUDECODE", " ")])));
+    assert!(!agent_from_env(env(&[])));
+
+    // A person at the terminal still gets ring 0; an agent gets ring 2 and the caveat.
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "regel", "freitags kein deploy");
+    write(&mut app, 2, "stand", "freitags kein deploy seit märz");
+    assert_eq!(
+        app.recall("freitags deploy", 8, None).unwrap().hits.len(),
+        2
+    );
+    app.agent = true;
+    let r = app.recall("freitags deploy", 8, None).unwrap();
+    assert_eq!(r.hits.len(), 1);
+    assert_eq!(r.hits[0].note_name, "stand");
+    assert_eq!(
+        app.recall("freitags deploy", 8, Some(Ring::Invariant))
+            .unwrap()
+            .hits
+            .len(),
+        1
+    );
+}
