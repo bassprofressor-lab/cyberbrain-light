@@ -22,6 +22,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   there, and `doctor --fix` did the same; such a note keeps its place now, and `scan` and
   `doctor` say it cannot be read. A note `.cyberbrainignore` hides still leaves the index, and
   `scan` counts it as ignored instead of as removed.
+- **The session-start hook honours `.cyberbrainignore`.** It read rings 0 and 1 straight from
+  their directories, so a resident note the operator had hidden was still injected into every
+  session while `cbl status` no longer counted it.
 
 ## [0.2.0] - 2026-10-23
 

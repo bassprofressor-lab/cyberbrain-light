@@ -430,6 +430,33 @@ fn session_start_injects_the_resident_rings_with_citations() {
     assert_eq!(v["hookSpecificOutput"]["hookEventName"], "SessionStart");
 }
 
+/// L4 (2026-10-31): the hook read notes/r0 and notes/r1 straight from the directory, past
+/// `.cyberbrainignore`. A resident note the operator hid — overruled, so hidden — was still
+/// injected into every session while `status` said it was gone.
+#[test]
+fn session_start_honours_cyberbrainignore() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 1, "neues-protokoll", "Deploy only from main.");
+    write(
+        &mut app,
+        1,
+        "altes-protokoll",
+        "ALTES PROTOKOLL: deploy from anywhere.",
+    );
+    std::fs::write(root.join(".cyberbrainignore"), "altes-protokoll.md\n").unwrap();
+    assert_eq!(app.status().unwrap().by_ring[1], 1, "status sees one");
+    drop(app);
+
+    let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(ctx.contains("Deploy only from main."));
+    assert!(!ctx.contains("ALTES PROTOKOLL"), "{ctx}");
+}
+
 #[test]
 fn the_resident_cap_holds_and_is_reported() {
     let (_d, root) = store(8192);

@@ -108,9 +108,10 @@ const CONTEXT_CHAR_CAP: usize = 9_400;
 /// Rings 0 and 1, rendered with their citations, cut at the token cap and at the character
 /// cap, whichever comes first.
 ///
-/// Read straight from `notes/r0` and `notes/r1` rather than through `Store::list`, so the
-/// cost is bounded by the cap and not by the size of the store. An invariant that cannot be
-/// read is reported rather than skipped in silence.
+/// The notes come from `Store::list`, so `.cyberbrainignore` applies here as it does to
+/// `status` and `scan`. Listing walks the tree without reading it; only rings 0 and 1 are
+/// opened, so what this costs is still bounded by the cap. An invariant that cannot be read
+/// is reported rather than skipped in silence.
 fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<String>)> {
     let mut notes = Vec::new();
     let mut out = String::new();
@@ -121,21 +122,16 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
     let mut chars = 0usize;
     let mut too_long: Vec<String> = Vec::new();
 
+    // Through the store's listing, which honours `.cyberbrainignore` (L4, 2026-10-31): a
+    // resident note the operator hid is the one that must not ride along any more.
+    let listing = app.store.list()?;
     for ring in [Ring::Invariant, Ring::Protocol] {
-        let dir = app.store.ring_dir(ring);
-        let mut paths: Vec<_> = match std::fs::read_dir(&dir) {
-            Ok(rd) => rd
-                .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.extension().is_some_and(|e| e == "md"))
-                .filter(|p| {
-                    !p.file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.starts_with('.'))
-                })
-                .collect(),
-            Err(_) => continue,
-        };
-        paths.sort();
+        let paths: Vec<_> = listing
+            .entries
+            .iter()
+            .filter(|e| e.ring == ring)
+            .map(|e| e.path.clone())
+            .collect();
 
         for path in paths {
             let note = match app.store.read_path(&path) {
