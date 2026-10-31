@@ -135,6 +135,17 @@ with Light and install Cyberbrain later, and one `cyberbrain scan` picks up ever
 already wrote. Light writes its three settings to `light.toml` and never touches the full
 product's `cyberbrain.toml`, so a store used by both keeps two independent configurations.
 
+**Light does not keep the full product's promises, and on a shared store it walks past
+them.** Cyberbrain checks every write for personal data, records every write and deletion in
+its audit chain, keeps an erasure record for every `forget`, and holds content marked
+`trust:untrusted` in `proposals/` until a person has read it. Light does none of that: `cbl
+write` and the MCP `write` put a note straight into `notes/`, and `cbl forget` deletes it,
+with no check, no audit row and no record. Cyberbrain cannot tell afterwards — its `doctor`
+still reports the audit chain as intact, because the chain is not broken, only incomplete.
+So once a store's audit record, its erasure record or its quarantine matter to you, stop
+using Light on it: `cbl install --undo`, and take `cbl mcp` out of your agent's MCP
+configuration.
+
 ## Provenance
 
 Light is built on the `cyberbrain-core` and `cyberbrain-index` crates, published by the same

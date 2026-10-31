@@ -138,6 +138,17 @@ Zitate. Wer mit Light anfängt und später Cyberbrain installiert, holt mit eine
 nach `light.toml` und fasst die `cyberbrain.toml` des großen Produkts nie an, ein von beiden
 benutzter Store behält also zwei unabhängige Konfigurationen.
 
+**Light hält die Zusagen des großen Produkts nicht, und in einem gemeinsamen Store geht es an
+ihnen vorbei.** Cyberbrain prüft jede Schreibung auf personenbezogene Daten, verzeichnet jede
+Schreibung und Löschung in seiner Audit-Kette, legt zu jedem `forget` einen Löschnachweis an
+und hält Inhalte mit `trust:untrusted` in `proposals/` fest, bis ein Mensch sie gelesen hat.
+Light tut nichts davon: `cbl write` und das MCP-Werkzeug `write` legen eine Notiz direkt unter
+`notes/` ab, `cbl forget` löscht sie, ohne Prüfung, ohne Audit-Zeile, ohne Nachweis. Cyberbrain
+merkt das hinterher nicht: sein `doctor` meldet die Audit-Kette weiter als intakt, denn sie
+ist nicht gebrochen, nur unvollständig. Sobald es also auf den Audit-Nachweis, die
+Löschnachweise oder die Quarantäne eines Stores ankommt, Light dort nicht mehr benutzen:
+`cbl install --undo`, und `cbl mcp` aus der MCP-Konfiguration des Agenten nehmen.
+
 ## Herkunft
 
 Light baut auf den Paketen `cyberbrain-core` und `cyberbrain-index` desselben Autors auf und
