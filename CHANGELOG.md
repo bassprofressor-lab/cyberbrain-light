@@ -29,6 +29,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   resident notes left out was added after the count, with every name in it, and a large note
   plus a few long names took the context past what Claude Code shows. The line now counts, and
   past 400 characters of names it gives the number of the rest.
+- **MCP refuses a ring that does not exist.** `ring: 258` was taken as ring 2 and `259` as
+  ring 3, so a slip of the model wrote into a ring it had not meant. Anything but 0 to 4 is now
+  an error the model is shown.
 
 ## [0.2.0] - 2026-10-23
 

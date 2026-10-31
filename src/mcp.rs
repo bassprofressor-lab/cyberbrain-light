@@ -201,11 +201,10 @@ impl Server {
             "recall" => {
                 let app = App::open(root)?;
                 let n = args.get("n").and_then(Value::as_u64).unwrap_or(8) as usize;
-                let ring = args
-                    .get("ring")
-                    .and_then(Value::as_u64)
-                    .map(|r| Ring::try_from(r as u8))
-                    .transpose()?;
+                let ring = match args.get("ring") {
+                    None | Some(Value::Null) => None,
+                    Some(v) => Some(ring_of(v)?),
+                };
                 let result = app.recall(&s("query"), n.clamp(1, 50), ring)?;
                 Ok(crate::render::hits_text(&result))
             }
@@ -222,11 +221,10 @@ impl Server {
             }
             "write" => {
                 let mut app = App::open(root)?;
-                let ring_n = args
-                    .get("ring")
-                    .and_then(Value::as_u64)
-                    .ok_or_else(|| anyhow::anyhow!("write needs `ring` (2, 3 or 4)"))?;
-                let ring = Ring::try_from(ring_n as u8)?;
+                let ring = ring_of(
+                    args.get("ring")
+                        .ok_or_else(|| anyhow::anyhow!("write needs `ring` (2, 3 or 4)"))?,
+                )?;
                 if ring.is_resident() {
                     anyhow::bail!(
                         "rings 0 and 1 belong to the operator; propose the text instead of \
@@ -266,6 +264,15 @@ impl Server {
             other => anyhow::bail!("unknown tool `{other}`"),
         }
     }
+}
+
+/// A ring number from the model. Checked whole (L6, 2026-10-31): `as u8` made 258 ring 2,
+/// and a write landed in a ring nobody asked for.
+fn ring_of(v: &Value) -> Result<Ring> {
+    v.as_u64()
+        .and_then(|n| u8::try_from(n).ok())
+        .and_then(|n| Ring::try_from(n).ok())
+        .ok_or_else(|| anyhow::anyhow!("`ring` must be a whole number from 0 to 4, not {v}"))
 }
 
 fn tool_list() -> Value {

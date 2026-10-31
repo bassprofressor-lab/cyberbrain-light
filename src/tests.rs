@@ -902,3 +902,29 @@ fn mcp_writes_and_reads_the_same_store_and_refuses_the_operator_rings() {
     assert_eq!(bad["result"]["isError"], true);
     assert!(bad["error"].is_null());
 }
+
+/// L6 (2026-10-31): `ring` was cut with `as u8`, so 258 was ring 2 and 259 ring 3. A ring the
+/// model did not mean is an error, not a guess.
+#[test]
+fn mcp_refuses_a_ring_out_of_range_instead_of_wrapping_it() {
+    let (_d, root) = store(8192);
+    let mut s = mcp_server(&root);
+    let w = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"write","arguments":
+            {"ring":258,"kind":"knowledge","name":"wrap-test","body":"wrapped around"}}}"#,
+    )
+    .unwrap();
+    assert_eq!(w["result"]["isError"], true, "{w}");
+    assert!(!root.join("notes/r2/wrap-test.md").exists());
+
+    let r = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"recall","arguments":
+            {"query":"anything","ring":259}}}"#,
+    )
+    .unwrap();
+    assert_eq!(r["result"]["isError"], true, "{r}");
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("0 to 4"), "{text}");
+}
