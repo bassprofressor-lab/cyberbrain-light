@@ -657,6 +657,69 @@ fn install_retires_its_old_pre_compact_entry_and_sets_a_timeout() {
     );
 }
 
+/// L7 (2026-10-31): `install` removed every empty hook list, also ones it never wrote, and
+/// sorted the user's keys alphabetically (serde_json without `preserve_order`).
+#[test]
+fn install_leaves_foreign_empty_lists_and_the_key_order_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let settings = dir.path().join(".claude/settings.json");
+    std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    std::fs::write(
+        &settings,
+        r#"{"permissions":{"allow":[]},"model":"opus","hooks":{"PreToolUse":[],
+            "SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"/theirs"}]}]}}"#,
+    )
+    .unwrap();
+    install::run(dir.path(), false).unwrap();
+    let text = std::fs::read_to_string(&settings).unwrap();
+    let v: Value = serde_json::from_str(&text).unwrap();
+    assert!(v["hooks"]["PreToolUse"].is_array(), "{text}");
+    let at = |k: &str| text.find(&format!("\"{k}\"")).unwrap();
+    assert!(
+        at("permissions") < at("model") && at("model") < at("hooks"),
+        "{text}"
+    );
+    assert!(at("PreToolUse") < at("SessionStart"), "{text}");
+
+    install::run(dir.path(), true).unwrap();
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+    assert!(v["hooks"]["PreToolUse"].is_array(), "survives the undo too");
+}
+
+/// L7: `--undo` wrote the file even when it removed nothing, and every write replaced
+/// `settings.json.bak`, so install then undo left the state before the undo as the only
+/// backup and the original was gone.
+#[test]
+fn install_writes_only_what_changed_and_never_overwrites_a_backup() {
+    let dir = tempfile::tempdir().unwrap();
+    let claude = dir.path().join(".claude");
+    let settings = claude.join("settings.json");
+    std::fs::create_dir_all(&claude).unwrap();
+    let original = "{\n  \"model\": \"opus\"\n}\n";
+    std::fs::write(&settings, original).unwrap();
+
+    let r = install::run(dir.path(), false).unwrap();
+    assert!(r.backup.is_some());
+    let undone = install::run(dir.path(), true).unwrap();
+    assert_eq!(undone.removed.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(claude.join("settings.json.bak")).unwrap(),
+        original,
+        "the backup of the original survives the undo"
+    );
+
+    let files = |d: &Path| std::fs::read_dir(d).unwrap().count();
+    let before = (std::fs::read_to_string(&settings).unwrap(), files(&claude));
+    let again = install::run(dir.path(), true).unwrap();
+    assert!(again.removed.is_empty());
+    assert!(again.backup.is_none(), "nothing changed, nothing backed up");
+    assert_eq!(
+        (std::fs::read_to_string(&settings).unwrap(), files(&claude)),
+        before,
+        "an undo with nothing to undo touches nothing"
+    );
+}
+
 #[test]
 fn install_refuses_a_settings_file_it_cannot_parse() {
     let dir = tempfile::tempdir().unwrap();

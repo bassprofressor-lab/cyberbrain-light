@@ -38,6 +38,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   an agent (`CLAUDECODE` or `CYBERBRAIN_AGENT` set), now leave them out and say so; `--ring 0`
   or `--ring 1` still searches them, and a person at the terminal still gets every ring. The
   full Cyberbrain draws the line in the same place.
+- **`cbl install` is careful with a settings file that is yours.** It removed every empty hook
+  list, also ones it never wrote, and sorted your keys alphabetically. `--undo` rewrote the file
+  even with nothing to remove, and each write replaced `settings.json.bak`, so after an install
+  and an undo the original was gone. Now a run that changes nothing writes nothing, only its own
+  empty lists are tidied away, the keys stay in your order, a backup never replaces an earlier
+  one (`settings.json.bak`, then `.bak.1` …), and the file is written through a temporary file
+  and a rename.
 
 ## [0.2.0] - 2026-10-23
 
