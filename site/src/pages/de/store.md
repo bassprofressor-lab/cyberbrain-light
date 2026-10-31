@@ -19,7 +19,8 @@ slug: "store/"
 │   ├── r1/
 │   └── r2/ …
 ├── cyberbrain.db   # der Suchindex (SQLite, FTS5); jederzeit neu mit `cbl scan --full`
-└── light.toml      # drei Einstellungen
+├── light.toml      # drei Einstellungen
+└── .light.lock     # gehalten, während cbl schreibt, damit sich zwei Schreibvorgänge nicht kreuzen
 ```
 
 Maßgeblich sind die Notizen, der Index wird aus ihnen gebaut. Soll das Team das Gedächtnis teilen, kommt `notes/` mit ins Repository, `cyberbrain.db` nicht.
@@ -65,4 +66,4 @@ Unabhängig vom Token-Deckel bleibt der Hook beim Sitzungsstart unter den 10.000
 
 ## Gemeinsam mit dem vollen Cyberbrain
 
-Der Aufbau des Stores ist der von Cyberbrain: gleiches Verzeichnis, gleiches Markdown, gleiche Ringe, gleiche Zitate. Wer mit Light anfängt und später [Cyberbrain](../light-or-full/) installiert, holt mit einem `cyberbrain scan` alle bisherigen Notizen herein. Light hält seine Einstellungen in `light.toml` und fasst die `cyberbrain.toml` des vollen Produkts nicht an.
+Der Aufbau des Stores ist der von Cyberbrain: gleiches Verzeichnis, gleiches Markdown, gleiche Ringe. Zitate sind Kennungen von Abschnitten, und ein neueres Cyberbrain teilt Notizen womöglich etwas anders auf. Nach einem vollen `cyberbrain scan` können sich deshalb einzelne Zitate ändern, die Notizen nicht. Wer mit Light anfängt und später [Cyberbrain](../light-or-full/) installiert, holt mit einem `cyberbrain scan` alle bisherigen Notizen herein. Light hält seine Einstellungen in `light.toml` und fasst die `cyberbrain.toml` des vollen Produkts nicht an.

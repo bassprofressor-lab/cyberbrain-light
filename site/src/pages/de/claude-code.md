@@ -73,9 +73,9 @@ Der Server spricht MCP über stdio, beantwortet `initialize` und seit 0.2.0 auch
 
 | Werkzeug | Argumente | Wirkung |
 |---|---|---|
-| `recall` | `query`, `n` (Vorgabe 8), `ring` | Stichwortsuche im Store, Treffer mit Zitat |
+| `recall` | `query`, `n` (Vorgabe 8), `ring` | Stichwortsuche in Ring 2 bis 4 (0 und 1 nur, wenn `ring` sie nennt), Treffer mit Zitat |
 | `recall_id` | ein Zitat wie `r2-a91f2c33e1bd` | die ganze Notiz dahinter |
-| `write` | `ring` (2, 3 oder 4), `kind`, `name`, `body` | Notiz schreiben oder aktualisieren (eine Aktualisierung über MCP leert die Tags der Notiz) |
+| `write` | `ring` (2, 3 oder 4), `kind`, `name`, `body` | Notiz schreiben oder aktualisieren; die Tags bleiben dabei erhalten |
 | `status` | | Notizen je Ring, Index, Budget der Ringe 0 und 1 |
 
 `write` lehnt Ring 0 und 1 ab. Die gehören der Person, die das Projekt führt; das Werkzeug sagt, man solle den Text vorschlagen oder `cbl write --ring 0 …` selbst ausführen.

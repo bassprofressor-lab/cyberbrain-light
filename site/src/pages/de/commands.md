@@ -46,7 +46,7 @@ cbl write --ring <RING> --kind <ART> --name <NAME> --body <TEXT> [--tags <TAGS>]
 | `--body <TEXT>` | der Text in Markdown; `-` liest ihn von der Standardeingabe |
 | `--tags <TAGS>` | optional, durch Kommas getrennt |
 
-Eine vorhandene Notiz bleibt in ihrem Ring. Ein `write` mit anderem Ring wird abgelehnt, weil ein Umzug ändert, was die Notiz überstimmen darf; wer das wirklich will, löscht sie vorher mit `cbl forget`. Felder, die Light nicht bearbeitet, auch die des vollen Cyberbrain, bleiben bei einer Änderung erhalten. Tags nicht: Eine Änderung ersetzt sie durch die mitgegebenen `--tags`, also beim Aktualisieren wieder angeben.
+Eine vorhandene Notiz bleibt in ihrem Ring. Ein `write` mit anderem Ring wird abgelehnt, weil ein Umzug ändert, was die Notiz überstimmen darf; wer das wirklich will, löscht sie vorher mit `cbl forget`. Felder, die Light nicht bearbeitet, auch die des vollen Cyberbrain, bleiben bei einer Änderung erhalten. Auch die Tags: Ohne `--tags` bleiben sie, mit `--tags` werden sie ersetzt, außer den Herkunfts-Tags `trust:untrusted` und `src:…`, die immer bleiben.
 
 ## scan
 
@@ -58,7 +58,7 @@ Baut den Index aus dem Notizbaum neu. Nötig nach Änderungen von Hand oder nach
 
 ## recall
 
-Durchsucht den Store, und zwar alle Ringe von 0 bis 4; `--ring` beschränkt die Suche auf einen.
+Durchsucht den Store. Fragt ein Agent (Claude Code setzt `CLAUDECODE`, oder `CYBERBRAIN_AGENT` setzen), bleiben Ring 0 und 1 weg, denn die hat er schon vom Sitzungsstart. Am Terminal bekommst du alle Ringe. `--ring` durchsucht genau einen Ring, auch 0 und 1.
 
 ```text
 cbl recall [ANFRAGE] [--id <ZITAT>] [-n <N>] [--ring <RING>]

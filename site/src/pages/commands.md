@@ -45,7 +45,7 @@ cbl write --ring <RING> --kind <KIND> --name <NAME> --body <BODY> [--tags <TAGS>
 | `--body <BODY>` | the note body in Markdown; `-` reads it from standard input |
 | `--tags <TAGS>` | optional, comma-separated |
 
-An existing note keeps its ring. A write that names a different ring is refused, because moving a note changes what it is allowed to override; `cbl forget` it first if the move is what you mean. Fields that Light does not edit, including those the full Cyberbrain writes, are kept on an edit. Tags are not: an edit replaces them with the `--tags` it is given, so repeat them when you update a note.
+An existing note keeps its ring. A write that names a different ring is refused, because moving a note changes what it is allowed to override; `cbl forget` it first if the move is what you mean. Fields that Light does not edit, including those the full Cyberbrain writes, are kept on an edit. Tags too: without `--tags` an edit keeps them; with `--tags` it replaces them, except the provenance tags `trust:untrusted` and `src:…`, which always stay.
 
 ## scan
 
@@ -57,7 +57,7 @@ Rebuild the index from the notes tree. Use it after editing notes by hand or aft
 
 ## recall
 
-Search the store. The search covers every ring, 0 to 4; `--ring` restricts it to one.
+Search the store. When an agent asks (Claude Code sets `CLAUDECODE`, or set `CYBERBRAIN_AGENT`), rings 0 and 1 are left out: the agent already has them from the session start. At a terminal you get every ring. `--ring` searches exactly one ring, 0 and 1 included.
 
 ```text
 cbl recall [QUERY] [--id <CITATION>] [-n <N>] [--ring <RING>]

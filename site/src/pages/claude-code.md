@@ -72,9 +72,9 @@ The server speaks MCP over stdio, answers `initialize` and, since 0.2.0, the 202
 
 | tool | arguments | what it does |
 |---|---|---|
-| `recall` | `query`, `n` (default 8), `ring` | keyword search over the store, hits with citations |
+| `recall` | `query`, `n` (default 8), `ring` | keyword search over rings 2 to 4 (0 and 1 only when `ring` names them), hits with citations |
 | `recall_id` | a citation such as `r2-a91f2c33e1bd` | the whole note behind it |
-| `write` | `ring` (2, 3 or 4), `kind`, `name`, `body` | write or update a note (an update through MCP clears the note's tags) |
+| `write` | `ring` (2, 3 or 4), `kind`, `name`, `body` | write or update a note; an update keeps its tags |
 | `status` | | note counts per ring, the index, the resident budget |
 
 `write` refuses rings 0 and 1. They belong to the person running the project; the tool says to propose the text instead, or to run `cbl write --ring 0 …` yourself.

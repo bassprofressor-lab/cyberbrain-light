@@ -18,7 +18,8 @@ slug: "store/"
 │   ├── r1/
 │   └── r2/ …
 ├── cyberbrain.db   # the search index (SQLite, FTS5); can always be rebuilt with `cbl scan --full`
-└── light.toml      # three settings
+├── light.toml      # three settings
+└── .light.lock     # held while cbl writes, so two writes do not cross
 ```
 
 The notes are the truth; the index is derived from them. Commit `notes/` with your code if the team should share the memory, and keep `cyberbrain.db` out of version control.
@@ -64,4 +65,4 @@ Independently of the token cap, the session-start hook stays under the 10,000 ch
 
 ## Shared with the full Cyberbrain
 
-The store layout is Cyberbrain's: same directory, same Markdown, same rings, same citations. Start with Light, install [Cyberbrain](../light-or-full/) later, and one `cyberbrain scan` picks up every note you already wrote. Light keeps its settings in `light.toml` and never touches Cyberbrain's `cyberbrain.toml`.
+The store layout is Cyberbrain's: same directory, same Markdown, same rings. Citations are block ids, and a newer Cyberbrain can split notes into blocks a little differently, so after a full `cyberbrain scan` some citations may change; the notes do not. Start with Light, install [Cyberbrain](../light-or-full/) later, and one `cyberbrain scan` picks up every note you already wrote. Light keeps its settings in `light.toml` and never touches Cyberbrain's `cyberbrain.toml`.
