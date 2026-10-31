@@ -20,6 +20,12 @@ pub const STORE_DIR: &str = ".cyberbrain";
 /// never touches it: a store that has been used with both should not have one tool's
 /// defaults silently rewritten by the other.
 pub const CONFIG_FILE: &str = "light.toml";
+/// Held while Light changes the store (L8, 2026-10-31). Two `cbl write` of the same new name
+/// both saw no note and both wrote the file; the second then failed on the index's name
+/// check, after its file had replaced the first one's. Serialised, the second one finds the
+/// note the first wrote and updates it. Between Light processes only: the full product does
+/// not take this lock.
+pub const LOCK_FILE: &str = ".light.lock";
 
 /// Everything Light can be configured to do. If a knob is not here, it is not a knob: the
 /// point of this product is that there is nothing to set up.
@@ -155,7 +161,22 @@ impl App {
 
     // ----- write ---------------------------------------------------------------------
 
+    /// Exclusive until the returned file is dropped.
+    fn lock(&self) -> Result<std::fs::File> {
+        let path = self.store.root().join(LOCK_FILE);
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .with_context(|| format!("opening {}", path.display()))?;
+        file.lock()
+            .with_context(|| format!("locking {}", path.display()))?;
+        Ok(file)
+    }
+
     pub fn write_note(&mut self, req: WriteRequest) -> Result<Written> {
+        let _lock = self.lock()?;
         let name = req.name.trim().to_string();
         frontmatter::validate_name(&name).map_err(|why| anyhow!("name `{name}`: {why}"))?;
 
@@ -246,6 +267,7 @@ impl App {
     /// hash is unchanged is left alone. `--full` throws the index away first, which is safe
     /// because the index is derived from files you can read without this tool.
     pub fn scan(&mut self, full: bool) -> Result<ScanReport> {
+        let _lock = self.lock()?;
         let started = std::time::Instant::now();
         if full {
             self.index.clear()?;
@@ -388,6 +410,7 @@ impl App {
     /// Delete a note and everything derived from it. Light keeps no erasure record: that is
     /// a compliance artefact and this product does not claim to produce them.
     pub fn forget(&mut self, name: &str) -> Result<Forgotten> {
+        let _lock = self.lock()?;
         let note = self.store.read(name)?;
         let erasure = self.index.delete_note(&note.front.id)?;
         let path = self.store.remove(name)?;

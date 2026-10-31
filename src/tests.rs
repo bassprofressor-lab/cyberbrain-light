@@ -146,6 +146,49 @@ fn an_edit_keeps_the_tags_and_never_drops_the_provenance() {
     );
 }
 
+/// L8 (2026-10-31): two writes of the same new name at once both saw no note, both wrote the
+/// file, and the second then failed on the index's name check — after its file had replaced
+/// the first one's. File and index disagreed, and the one that "failed" was the one on disk.
+#[test]
+fn concurrent_writes_of_one_new_name_leave_file_and_index_agreeing() {
+    let (_d, root) = store(8192);
+    for round in 0..10 {
+        let name = format!("race-{round}");
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(6));
+        let handles: Vec<_> = (0..6)
+            .map(|i| {
+                let (root, name, barrier) = (root.clone(), name.clone(), barrier.clone());
+                std::thread::spawn(move || {
+                    let mut app = App::open(&root).unwrap();
+                    barrier.wait();
+                    app.write_note(WriteRequest {
+                        ring: Ring::Knowledge,
+                        kind: NoteKind::Knowledge,
+                        name,
+                        body: format!("body {i}"),
+                        tags: vec![],
+                    })
+                    .map(|w| w.created)
+                    .map_err(|e| e.to_string())
+                })
+            })
+            .collect();
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert!(
+            results.iter().all(Result::is_ok),
+            "round {round}: {results:?}"
+        );
+        assert_eq!(
+            results.iter().filter(|r| *r == &Ok(true)).count(),
+            1,
+            "round {round}: one created it, the others updated it: {results:?}"
+        );
+    }
+    let mut app = App::open(&root).unwrap();
+    let d = app.doctor(false).unwrap();
+    assert!(d.findings.is_empty(), "{:?}", d.findings);
+}
+
 #[test]
 fn moving_a_note_between_rings_is_refused_rather_than_done_quietly() {
     let (_d, root) = store(8192);

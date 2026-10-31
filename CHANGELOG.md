@@ -45,6 +45,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   empty lists are tidied away, the keys stay in your order, a backup never replaces an earlier
   one (`settings.json.bak`, then `.bak.1` …), and the file is written through a temporary file
   and a rename.
+- **Two writes of the same new note at once no longer split file and index.** Both saw no
+  note, both wrote the file, and the second one failed after its file had already replaced the
+  first one's; `cbl doctor` then found the store out of step. `write`, `scan` and `forget` now
+  take a lock on the store (`.cyberbrain/.light.lock`), and the second write updates the note
+  the first one created.
 
 ## [0.2.0] - 2026-10-23
 
