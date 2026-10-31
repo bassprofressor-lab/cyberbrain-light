@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-31
+
 - **An edit keeps the tags.** `cbl write` on an existing note without `--tags`, and every MCP
   `write`, removed all of its tags, among them `trust:untrusted` and `src:…`, which say a note
   came from outside. One overwrite, also by the model, turned an imported e-mail into a note

@@ -15,7 +15,7 @@ Das Paket heißt `cyberbrain-light`, das Programm, das es installiert, heißt `c
 ```console
 $ cargo install cyberbrain-light --locked
 $ cbl --version
-cbl 0.2.0
+cbl 0.2.1
 ```
 
 Dafür braucht es Rust 1.98 oder neuer. `--locked` baut mit genau den Abhängigkeiten, mit denen das Release getestet wurde.

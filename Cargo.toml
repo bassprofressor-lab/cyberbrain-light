@@ -1,6 +1,6 @@
 [package]
 name = "cyberbrain-light"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.98"
 license = "FSL-1.1-ALv2"
@@ -11,7 +11,7 @@ description = "Cited, trust-tiered memory for AI coding agents. Lexical search, 
 keywords = ["ai-agents", "memory", "retrieval", "mcp", "markdown"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
-include = ["src/**", "README.md", "LICENSE.md"]
+include = ["/src/**", "/README.md", "/LICENSE.md"]
 
 [[bin]]
 name = "cbl"

@@ -14,7 +14,7 @@ The crate is called `cyberbrain-light`; the binary it puts on your path is `cbl`
 ```console
 $ cargo install cyberbrain-light --locked
 $ cbl --version
-cbl 0.2.0
+cbl 0.2.1
 ```
 
 This needs a Rust toolchain (1.98 or newer). `--locked` builds with exactly the dependency versions the release was tested with.
