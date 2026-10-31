@@ -54,6 +54,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   instead of a tag that can be moved (Dependabot keeps the pins current), only the job that
   attaches the files to the release may write to the repository, and the release build no
   longer uses the build cache it shares with ordinary CI runs.
+- **Licences and advisories are checked in CI, every week.** There was no `deny.toml`, so
+  `cargo deny check` failed on the first MIT crate, and CI never ran it. The file now lists
+  the licences the tree actually holds (FSL-1.1-ALv2 only for our own three crates), and a CI
+  job runs the check on every push and once a week without one.
 
 ## [0.2.0] - 2026-10-23
 

@@ -1163,3 +1163,18 @@ fn every_action_is_pinned_and_only_publish_may_write() {
         }
     }
 }
+
+/// L10 (2026-10-31): there was no `deny.toml`, so `cargo deny check` failed on MIT, and CI
+/// did not run it, so a new advisory against a dependency would have gone unnoticed.
+#[test]
+fn cargo_deny_has_a_config_and_runs_in_ci_every_week() {
+    let Some(ci) = workflow("ci.yml") else { return };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let deny = std::fs::read_to_string(root.join("deny.toml")).expect("deny.toml");
+    assert!(deny.contains("[licenses]") && deny.contains("[advisories]"));
+    assert!(
+        ci.contains("EmbarkStudios/cargo-deny-action@"),
+        "no deny job"
+    );
+    assert!(ci.contains("schedule:"), "advisories arrive without a push");
+}

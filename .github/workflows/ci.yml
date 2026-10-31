@@ -1,11 +1,17 @@
-# Three jobs, because there are three ways this can be wrong: it does not build, it is not
-# formatted the way the rest of the tree is, or it does not do what the tests say it does.
+# Three ways this can be wrong in the code: it does not build, it is not formatted the way
+# the rest of the tree is, or it does not do what the tests say it does. And one outside it:
+# a dependency with an advisory or a licence nobody decided on.
 name: ci
 
 on:
   push:
     branches: [main]
   pull_request:
+  # Weekly, with no push: a new RustSec advisory against a dependency arrives without any
+  # change here, and the deny job below is what notices it.
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -60,3 +66,21 @@ jobs:
           "$B" status | grep -q 'lexical only'
           echo '{}' | "$B" hook session-start > /dev/null
           "$B" doctor
+
+  # Licences, advisories, bans and sources, against deny.toml (L10, 2026-10-31).
+  deny:
+    name: licences and advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The action runs in its own container, and `rust-toolchain.toml` would make it fetch
+      # a toolchain it does not need: cargo-deny reads manifests and the lockfile, it does
+      # not compile anything. Same step as in the full product.
+      - name: keep the toolchain pin out of the deny container
+        run: mv rust-toolchain.toml rust-toolchain.toml.off
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+      - run: mv rust-toolchain.toml.off rust-toolchain.toml

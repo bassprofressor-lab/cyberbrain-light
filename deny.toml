@@ -1,0 +1,36 @@
+# cargo deny check (L10, 2026-10-31). Without this file cargo-deny allows no licence at all,
+# and the licence check failed on MIT; with it, what is in the tree is a decision written down.
+[licenses]
+version = 2
+# What the dependency graph actually holds, by the alternative each crate offers that is on
+# this list. Nothing copyleft: an `OR LGPL-2.1-or-later` crate is taken under MIT.
+allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Zlib"]
+confidence-threshold = 0.9
+
+# Our own crates, and only them, are FSL-1.1-ALv2. A third-party crate under it would be a
+# question for a person, not something to pass by default.
+[[licenses.exceptions]]
+crate = "cyberbrain-light"
+allow = ["FSL-1.1-ALv2"]
+
+[[licenses.exceptions]]
+crate = "cyberbrain-core"
+allow = ["FSL-1.1-ALv2"]
+
+[[licenses.exceptions]]
+crate = "cyberbrain-index"
+allow = ["FSL-1.1-ALv2"]
+
+[bans]
+multiple-versions = "warn"
+# Light makes no network connections and links no system library: either of these in the
+# tree would mean that changed without anybody deciding it.
+deny = [{ name = "native-tls" }, { name = "openssl-sys" }, { name = "reqwest" }, { name = "hyper" }]
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
