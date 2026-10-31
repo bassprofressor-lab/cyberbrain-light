@@ -52,6 +52,8 @@ pub enum Cmd {
         /// The note body. `-` reads it from standard input.
         #[arg(long)]
         body: String,
+        /// Comma-separated. On an existing note they replace its tags; left out, the tags
+        /// stay. `trust:untrusted` and `src:` tags stay either way.
         #[arg(long, value_delimiter = ',')]
         tags: Vec<String>,
     },

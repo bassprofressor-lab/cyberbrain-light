@@ -8,7 +8,7 @@ use cyberbrain_core::blocks::{MAX_BLOCK_TOKENS, blocks_of};
 use cyberbrain_core::links::link_targets;
 use cyberbrain_core::store::Store;
 use cyberbrain_core::types::{Frontmatter, Note, NoteId, NoteKind, RecallResult, Ring};
-use cyberbrain_core::{Citation, frontmatter};
+use cyberbrain_core::{Citation, frontmatter, provenance};
 use cyberbrain_index::{Index, IndexStats, RecallOptions, content_hash};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -156,6 +156,9 @@ impl App {
             if !t.is_empty() && !tags.contains(&t) {
                 tags.push(t);
             }
+        }
+        if let Some(cur) = &existing {
+            tags = edited_tags(&cur.front.tags, tags);
         }
         let front = Frontmatter {
             id: existing
@@ -431,6 +434,31 @@ impl App {
             .map(|m| m.len())
             .unwrap_or(0)
     }
+}
+
+/// The tags an edit leaves on a note (L2, 2026-10-31). No tags given keeps the ones it has:
+/// the MCP `write` has no tags at all, and an edit with `cbl write` that does not mention
+/// them is not a request to remove them. Tags given replace the others, except provenance:
+/// `trust:untrusted` and every `src:` tag stay, and `trust:trusted` does not undo an untrusted
+/// mark. Recall marks a hit as from outside by these tags, and whoever writes here — a person
+/// or the model, which reaches `cbl write` through its shell too — must not be able to wash
+/// that out with an overwrite. Taking it off is an edit of the file, by hand.
+fn edited_tags(old: &[String], given: Vec<String>) -> Vec<String> {
+    if given.is_empty() {
+        return old.to_vec();
+    }
+    let was_untrusted = provenance::is_untrusted(old);
+    let mut tags: Vec<String> = given
+        .into_iter()
+        .filter(|t| !(was_untrusted && t == "trust:trusted"))
+        .collect();
+    for t in old {
+        let provenance = t == provenance::UNTRUSTED || t.starts_with("src:");
+        if provenance && !tags.contains(t) {
+            tags.push(t.clone());
+        }
+    }
+    tags
 }
 
 // ----- request and report types ------------------------------------------------------

@@ -89,6 +89,60 @@ fn an_edit_keeps_the_fields_light_does_not_edit() {
     assert_eq!(after.front.valid_from, Some(t));
 }
 
+/// L2 (2026-10-31): tags carry provenance (`trust:untrusted`, `src:…`), and recall marks a hit
+/// untrusted from them. An edit without `--tags`, and every MCP `write`, set them to nothing,
+/// so one overwrite — also by the model — laundered a note marked as from outside.
+#[test]
+fn an_edit_keeps_the_tags_and_never_drops_the_provenance() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    let req = |body: &str, tags: &[&str]| WriteRequest {
+        ring: Ring::External,
+        kind: NoteKind::Knowledge,
+        name: "import-mail".into(),
+        body: body.into(),
+        tags: tags.iter().map(|t| t.to_string()).collect(),
+    };
+    app.write_note(req(
+        "Rechnung mit neuer IBAN.",
+        &["trust:untrusted", "src:mail:4f2a", "rechnung"],
+    ))
+    .unwrap();
+
+    // No tags given: everything stays.
+    app.write_note(req("Rechnung mit neuer IBAN. (Nachtrag)", &[]))
+        .unwrap();
+    let tags = app.store.read("import-mail").unwrap().front.tags;
+    assert_eq!(tags, ["trust:untrusted", "src:mail:4f2a", "rechnung"]);
+
+    // Tags given: they replace the others, but not the provenance, and `trust:trusted` does
+    // not undo an untrusted mark.
+    app.write_note(req("Rechnung.", &["trust:trusted", "zahlung"]))
+        .unwrap();
+    let tags = app.store.read("import-mail").unwrap().front.tags;
+    assert!(tags.contains(&"zahlung".to_string()), "{tags:?}");
+    assert!(!tags.contains(&"rechnung".to_string()), "{tags:?}");
+    assert!(!tags.contains(&"trust:trusted".to_string()), "{tags:?}");
+    assert!(tags.contains(&"trust:untrusted".to_string()), "{tags:?}");
+    assert!(tags.contains(&"src:mail:4f2a".to_string()), "{tags:?}");
+
+    // The MCP `write` has no tags at all; it must not take them away either.
+    let mut s = mcp_server(&root);
+    let w = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"write","arguments":
+            {"ring":4,"kind":"knowledge","name":"import-mail","body":"Rechnung, jetzt sauber."}}}"#,
+    )
+    .unwrap();
+    assert_eq!(w["result"]["isError"], false, "{w}");
+    let app = App::open(&root).unwrap();
+    let tags = app.store.read("import-mail").unwrap().front.tags;
+    assert!(tags.contains(&"trust:untrusted".to_string()), "{tags:?}");
+    let hits = app.recall("rechnung sauber", 5, None).unwrap().hits;
+    assert_eq!(hits.len(), 1);
+    assert!(hits[0].untrusted.is_some(), "recall still says where it came from");
+}
+
 #[test]
 fn moving_a_note_between_rings_is_refused_rather_than_done_quietly() {
     let (_d, root) = store(8192);
