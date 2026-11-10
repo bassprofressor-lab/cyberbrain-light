@@ -12,6 +12,54 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-10
+
+- **Light opens a store Cyberbrain 0.10 has touched.** Built on Cyberbrain 0.10.1
+  (`cyberbrain-core`, `cyberbrain-index`), which writes index schema 6; Light 0.2.1 understood
+  5 and refused every such store. An older index is brought to schema 6 on open, notes and
+  all; after that, Light 0.2.1 and Cyberbrain before 0.10 no longer open it. The update also
+  takes `rusqlite` to 0.41.1 and `libsqlite3-sys` to 0.39.1, which fixes RUSTSEC-2026-0459.
+- **A store that does not open is no longer a silent session start.** The session-start hook
+  printed one line on stderr and gave the model nothing, so it worked as if the project had no
+  rules. It now tells the model that rings 0 and 1 are missing and why, and stderr carries the
+  whole error. An index newer than Light says to upgrade Light; nothing says to delete it any
+  more, since the index belongs to the store and a newer Cyberbrain may keep more in it.
+- **Only your own store is found by walking up.** Every command took the first
+  `.cyberbrain/notes` above the working directory, whoever it belonged to, and the hook put its
+  rings 0 and 1 into the session as the operator's rules; one left in `/tmp` or a shared parent
+  directory was enough. The store found that way must now be owned by your account and writable
+  by nobody else (group write only for your own primary group), and the walk stops at your home
+  directory and at a file system boundary. A refused store is named; `--store` still opens it.
+  On Windows ownership is not checked.
+- **Outside material and outdated notes are marked in the text.** `cbl recall`, `cbl recall
+  --id` and the MCP `recall` and `recall_id` the model reads now say when a note is tagged
+  `trust:untrusted` and where it came from, when another note replaces it, and when it is no
+  longer or not yet valid. Only `--json` said so before.
+- **`cbl install` keeps the mode of `settings.json`** (a 0600 file came back 0644, its backup
+  too) **and leaves a link alone**: a `settings.json` that is a symbolic link was replaced by a
+  plain file. It now stops and says so, rather than writing through the link into a file
+  outside the project.
+- **Rings 0 and 1 are left out of an agent's recall only where a hook injects them.** The MCP
+  `recall`, and `cbl recall` run by an agent, assumed the session-start hook had put them into
+  the context; without it, and in every subagent, nothing had, and the agent met the
+  operator's rules nowhere. They are now left out only where the project's settings carry a
+  SessionStart and a SubagentStart hook of Light or Cyberbrain. `cbl install` writes the new
+  SubagentStart entry (`cbl hook subagent-start`); run it again in projects installed before.
+- **An agent's recall finds ring 2 behind many resident matches.** Rings 0 and 1 were dropped
+  after the candidates had been cut to 50, so enough resident blocks with the query's words
+  returned no hits at all. They are now left out inside the search.
+- **Resident notes over the token cap are named to the model**, in the same closing line as
+  the ones over the character limit, instead of on stderr only.
+- **`scan --full` and `doctor --fix` finish when a name is used twice.** Two files of one name
+  in two rings stopped the scan at the second, and after `--full` the index was left half
+  empty. The second is now skipped and named, and every other note is indexed.
+- **Smaller things.** `n` in `light.toml` is what `recall` returns by default (it was ignored);
+  `cbl init` on an existing store keeps and reports the cap in its `light.toml`; writing a
+  resident note too long for the session start warns; the MCP server answers a line that is
+  not UTF-8 instead of ending, answers a JSON value that is not an object with an error instead
+  of nothing, refuses `n` as a string and an empty `body`, and keeps an error's whole chain;
+  control characters in note text are written out instead of reaching the terminal.
+
 ## [0.2.1] - 2026-10-31
 
 - **An edit keeps the tags.** `cbl write` on an existing note without `--tags`, and every MCP

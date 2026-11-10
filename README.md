@@ -38,7 +38,7 @@ every result, so nobody builds on a search that did not happen.
 ```console
 $ cargo install cyberbrain-light
 $ cbl init
-$ cbl install          # writes the session-start hook into .claude/settings.json
+$ cbl install          # writes the session- and subagent-start hooks into .claude/settings.json
 ```
 
 The crate is `cyberbrain-light`, the binary it puts on your path is `cbl`.
@@ -69,7 +69,7 @@ Four ways in, all from the same binary:
 | | |
 |---|---|
 | `cbl <command>` | `init`, `write`, `scan`, `recall`, `forget`, `status`, `doctor` — `--json` on all of them |
-| `cbl hook <event>` | `session-start` injects rings 0 and 1 (at most the 10,000 characters Claude Code shows, and names what did not fit); `pre-compact` is still accepted but no longer installed: Claude Code discards its message |
+| `cbl hook <event>` | `session-start` and `subagent-start` inject rings 0 and 1 (at most the 10,000 characters Claude Code shows, and name what did not fit); `pre-compact` is still accepted but no longer installed: Claude Code discards its message |
 | `cbl mcp` | Model Context Protocol over stdio: `recall`, `recall_id`, `write`, `status` |
 | `cbl install` | puts the hooks into a project's `.claude/settings.json`, and takes them out |
 
@@ -87,10 +87,20 @@ Notes live in numbered rings, and the number is a claim about trust.
 
 Rings 0 and 1 ride along in every session under a token cap, so the agent starts knowing the
 rules instead of rediscovering them. They belong to you: the MCP `write` tool refuses them,
-and says to propose the text instead. Because the agent already holds them, `recall` leaves
-them out when an agent asks (the MCP tool, or `cbl recall` with `CLAUDECODE` or
-`CYBERBRAIN_AGENT` set) and says so; `--ring 0` or `--ring 1` searches them anyway. At your
-own terminal you get every ring.
+and says to propose the text instead. Where the hooks put them into every session and
+subagent (`cbl install`, or the full Cyberbrain's), the agent already holds them, so `recall`
+leaves them out when an agent asks (the MCP tool, or `cbl recall` with `CLAUDECODE` or
+`CYBERBRAIN_AGENT` set) and says so; `--ring 0` or `--ring 1` searches them anyway. Without
+those hooks, and at your own terminal, you get every ring.
+
+A command finds its store by walking up from the working directory, and takes the first
+`.cyberbrain` it meets only if it is yours: owned by your account and writable by nobody else
+(group write only for your own primary group). It does not climb above your home directory or
+onto another file system. A store that fails this is named and not used; `--store` or
+`CYBERBRAIN_STORE` opens it on purpose. On Windows ownership is not checked.
+
+Results that came from outside (`trust:untrusted`), that another note replaces or that are
+no longer valid are marked as such, in the text as well as in `--json`.
 
 ## What it costs
 
@@ -132,7 +142,8 @@ could.
 
 **The store is the same.** Same directory, same Markdown, same rings, same citations. Start
 with Light and install Cyberbrain later, and one `cyberbrain scan` picks up every note you
-already wrote. Light writes its three settings to `light.toml` and never touches the full
+already wrote. Light 0.2.2 reads the index of Cyberbrain 0.10 (schema 6) and brings an older
+one up to it; after that, Light 0.2.1 and Cyberbrain before 0.10 no longer open it. Light writes its three settings to `light.toml` and never touches the full
 product's `cyberbrain.toml`, so a store used by both keeps two independent configurations.
 
 **Light does not keep the full product's promises, and on a shared store it walks past
