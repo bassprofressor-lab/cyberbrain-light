@@ -549,10 +549,26 @@ impl App {
             .resolve(&cit)?
             .ok_or_else(|| anyhow!("no block carries the citation `{citation}`"))?;
         let note = self.store.read(&record.front.name)?;
+        // What recall marks on a hit, the expansion marks on the note (3, 2026-11-10): the
+        // model reads this text, and an imported e-mail must not read like any other note.
+        // A note is replaced when it names its successor or another note names it in
+        // `supersedes`.
+        let now = jiff::Timestamp::now();
+        let superseded_by = note.front.superseded_by.clone().or_else(|| {
+            self.index.notes().ok().and_then(|all| {
+                all.into_iter()
+                    .find(|r| r.front.supersedes.contains(&note.front.name))
+                    .map(|r| r.front.name)
+            })
+        });
         Ok(Expanded {
             citation: cit.to_string(),
             name: record.front.name.clone(),
             ring: record.front.ring,
+            untrusted: provenance::untrusted_source(&note.front.tags),
+            superseded_by,
+            valid_from: note.front.valid_from.filter(|t| *t > now),
+            invalid_at: note.front.invalid_at.filter(|t| *t <= now),
             block: block.text,
             body: note.body,
         })
@@ -690,9 +706,11 @@ impl App {
 /// the MCP `write` has no tags at all, and an edit with `cbl write` that does not mention
 /// them is not a request to remove them. Tags given replace the others, except provenance:
 /// `trust:untrusted` and every `src:` tag stay, and `trust:trusted` does not undo an untrusted
-/// mark. Recall marks a hit as from outside by these tags, and whoever writes here — a person
-/// or the model, which reaches `cbl write` through its shell too — must not be able to wash
-/// that out with an overwrite. Taking it off is an edit of the file, by hand.
+/// mark. Recall and the expansion of a citation mark a note as from outside by these tags, in
+/// the JSON and, since 0.2.2, in the text a person or the model reads (`render`), and whoever
+/// writes here — a person or the model, which reaches `cbl write` through its shell too — must
+/// not be able to wash that out with an overwrite. Taking it off is an edit of the file, by
+/// hand.
 fn edited_tags(old: &[String], given: Vec<String>) -> Vec<String> {
     if given.is_empty() {
         return old.to_vec();
@@ -755,6 +773,17 @@ pub struct Expanded {
     pub citation: String,
     pub name: String,
     pub ring: Ring,
+    /// Where the note came from, when it is tagged `trust:untrusted`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub untrusted: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub superseded_by: Option<String>,
+    /// Set only when it lies in the future: the note does not hold yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<jiff::Timestamp>,
+    /// Set only when it lies in the past: the note held until then.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invalid_at: Option<jiff::Timestamp>,
     pub block: String,
     pub body: String,
 }

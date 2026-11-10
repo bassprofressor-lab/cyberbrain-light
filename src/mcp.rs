@@ -213,13 +213,7 @@ impl Server {
             "recall_id" => {
                 let app = App::open(root)?;
                 let e = app.expand(&s("citation"))?;
-                Ok(format!(
-                    "{} r{} `{}`\n\n{}",
-                    e.citation,
-                    e.ring.as_u8(),
-                    e.name,
-                    e.body.trim()
-                ))
+                Ok(crate::render::expanded_text(&e))
             }
             "write" => {
                 let mut app = App::open(root)?;

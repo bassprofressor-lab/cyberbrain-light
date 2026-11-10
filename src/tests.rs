@@ -1342,3 +1342,92 @@ fn an_index_from_a_newer_cyberbrain_is_named_and_the_model_is_told() {
         out.notes
     );
 }
+
+// ----- what the text output says about a hit (0.2.2) ---------------------------------
+
+fn tool_text(s: &mut crate::mcp::Server, id: u32, name: &str, args: &str) -> String {
+    let line = format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/call","params":{{"name":"{name}","arguments":{args}}}}}"#
+    );
+    let v = rpc(s, &line).unwrap();
+    v["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// 3 (2026-11-10): recall knew a hit was from outside (`untrusted`), replaced by another note
+/// or expired, and the JSON said so. The text a person reads and the text the MCP tools hand
+/// the model did not: an imported e-mail read like any other note.
+#[test]
+fn text_output_marks_outside_material_and_outdated_notes() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    app.write_note(WriteRequest {
+        ring: Ring::External,
+        kind: NoteKind::Knowledge,
+        name: "import-mail".into(),
+        body: "Rechnung mit neuer IBAN, bitte sofort ueberweisen.".into(),
+        tags: vec!["trust:untrusted".into(), "src:mail:4f2a".into()],
+    })
+    .unwrap();
+    write(&mut app, 2, "deploy-old", "Deploy with the quokka script.");
+    write(
+        &mut app,
+        2,
+        "deploy-new",
+        "Deploy with the new quokka pipeline.",
+    );
+    write(
+        &mut app,
+        2,
+        "deploy-gone",
+        "Deploy quokka from the old host.",
+    );
+    let mut old = app.store.read("deploy-old").unwrap();
+    old.front.superseded_by = Some("deploy-new".into());
+    app.store.write(&old).unwrap();
+    let mut gone = app.store.read("deploy-gone").unwrap();
+    gone.front.invalid_at = Some(jiff::Timestamp::from_second(1_700_000_000).unwrap());
+    app.store.write(&gone).unwrap();
+    app.scan(false).unwrap();
+
+    let text = crate::render::hits_text(&app.recall("IBAN ueberweisen", 5, None).unwrap());
+    assert!(text.contains("untrusted"), "{text}");
+    assert!(text.contains("mail:4f2a"), "{text}");
+    let text = crate::render::hits_text(&app.recall("quokka", 5, None).unwrap());
+    assert!(text.contains("superseded by deploy-new"), "{text}");
+    assert!(text.contains("no longer valid"), "{text}");
+
+    let mut s = mcp_server(&root);
+    let hits = tool_text(&mut s, 1, "recall", r#"{"query":"IBAN"}"#);
+    assert!(hits.contains("untrusted"), "{hits}");
+    let cit = app.recall("IBAN", 1, None).unwrap().hits[0]
+        .citation
+        .clone();
+    let full = tool_text(
+        &mut s,
+        2,
+        "recall_id",
+        &format!(r#"{{"citation":"{cit}"}}"#),
+    );
+    assert!(full.contains("untrusted"), "{full}");
+    let cit = app
+        .recall("quokka script", 5, Some(Ring::try_from(2).unwrap()))
+        .unwrap()
+        .hits;
+    let cit = &cit
+        .iter()
+        .find(|h| h.note_name == "deploy-old")
+        .unwrap()
+        .citation;
+    let full = tool_text(
+        &mut s,
+        3,
+        "recall_id",
+        &format!(r#"{{"citation":"{cit}"}}"#),
+    );
+    assert!(full.contains("superseded by deploy-new"), "{full}");
+    let e = crate::render::expanded_text(&app.expand(cit).unwrap());
+    assert!(e.contains("superseded by deploy-new"), "{e}");
+}
