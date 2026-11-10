@@ -1,7 +1,7 @@
 //! Tests for the whole of Light. Every one of them runs against a real store in a temporary
 //! directory: this product is small enough that there is no excuse for testing it in pieces.
 
-use crate::app::{App, LightConfig, WriteRequest, find_store};
+use crate::app::{Account, App, LightConfig, WriteRequest, discover, find_store};
 use crate::cli::HookEvent;
 use crate::{hook, install};
 use cyberbrain_core::types::{NoteKind, Ring};
@@ -808,6 +808,74 @@ fn a_command_works_from_a_subdirectory() {
         PathBuf::from("/explicit"),
         "--store wins over the search"
     );
+}
+
+/// 2 (2026-11-10): the walk up took the first `.cyberbrain/notes` it met, whoever it belonged
+/// to, and the session-start hook put its rings 0 and 1 into the session as the operator's
+/// rules. A store that others can write is not taken from a parent directory any more.
+#[cfg(unix)]
+#[test]
+fn a_store_others_can_write_is_not_taken_from_a_parent_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, root) = store(8192);
+    let deep = dir.path().join("a/b");
+    std::fs::create_dir_all(&deep).unwrap();
+    assert_eq!(find_store(None, &deep).unwrap(), root);
+
+    std::fs::set_permissions(root.join("notes"), std::fs::Permissions::from_mode(0o777)).unwrap();
+    let err = find_store(None, &deep).expect_err("a world-writable store is refused");
+    assert!(format!("{err:#}").contains("--store"), "{err:#}");
+    // Asked for by name, it is still opened: that is a decision, not a discovery.
+    assert_eq!(find_store(Some(root.clone()), &deep).unwrap(), root);
+}
+
+/// The same walk, as other accounts and with a home directory: another account's store is
+/// refused and named, a group-writable one only passes for the user's own group, and the walk
+/// does not climb above home.
+#[cfg(unix)]
+#[test]
+fn the_walk_takes_only_this_accounts_store_and_stops_at_home() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let (dir, root) = store(8192);
+    let deep = dir.path().join("a/b");
+    std::fs::create_dir_all(&deep).unwrap();
+    let meta = std::fs::metadata(&root).unwrap();
+    let me = Account {
+        uid: meta.uid(),
+        gid: meta.gid(),
+    };
+    assert_eq!(discover(&deep, Some(me), None).unwrap(), root);
+
+    let stranger = Account {
+        uid: me.uid.wrapping_add(4242),
+        gid: me.gid,
+    };
+    let err = format!("{:#}", discover(&deep, Some(stranger), None).unwrap_err());
+    assert!(err.contains("belongs to uid"), "{err}");
+    assert!(
+        err.contains(&root.display().to_string()),
+        "names the store: {err}"
+    );
+
+    std::fs::set_permissions(root.join("notes"), std::fs::Permissions::from_mode(0o775)).unwrap();
+    assert!(
+        discover(&deep, Some(me), None).is_ok(),
+        "own group may write"
+    );
+    let other_group = Account {
+        uid: me.uid,
+        gid: me.gid.wrapping_add(4242),
+    };
+    assert!(discover(&deep, Some(other_group), None).is_err());
+
+    // Home is `dir/a`: the store in `dir` is above it and is not looked at.
+    let err = format!(
+        "{:#}",
+        discover(&deep, Some(me), Some(&dir.path().join("a"))).unwrap_err()
+    );
+    assert!(err.contains("no store found"), "{err}");
+    // A home the walk did not start in is no limit.
+    assert!(discover(&deep, Some(me), Some(Path::new("/nonexistent-home"))).is_ok());
 }
 
 #[test]

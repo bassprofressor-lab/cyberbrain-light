@@ -51,10 +51,17 @@ fn main() -> ExitCode {
 
 fn run_hook(event: cli::HookEvent, store: Option<std::path::PathBuf>) -> Result<()> {
     let cwd = std::env::current_dir()?;
-    // A missing store is not an error here: most projects do not have one.
+    // A missing store is not an error here: most projects do not have one. A store that was
+    // found and refused (another account's, writable by others) is named on stderr, so the
+    // human sees why the session started without it.
     let root = match find_store(store, &cwd) {
         Ok(r) => r,
-        Err(_) => return Ok(()),
+        Err(e) => {
+            if !e.to_string().starts_with("no store found") {
+                eprintln!("cbl {}: {e:#}", event.as_str());
+            }
+            return Ok(());
+        }
     };
     let mut stdin = String::new();
     let _ = std::io::stdin().read_to_string(&mut stdin);

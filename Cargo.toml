@@ -29,6 +29,11 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }
 toml = "1.1.5"
 
+# `geteuid`/`getegid` for the ownership check on a store found by walking up. Already in the
+# tree through ulid's getrandom, so nothing new is downloaded or built.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"
+
 [dev-dependencies]
 # The schema tests set up an index the way an older or a newer Cyberbrain left it. The same
 # version cyberbrain-index links, so nothing new is built.

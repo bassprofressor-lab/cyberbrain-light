@@ -267,6 +267,7 @@ dependencies = [
  "cyberbrain-core",
  "cyberbrain-index",
  "jiff",
+ "libc",
  "rusqlite",
  "serde",
  "serde_json",

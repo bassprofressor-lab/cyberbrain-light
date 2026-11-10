@@ -81,20 +81,142 @@ impl LightConfig {
 
 /// Walk up from `from` looking for a store. A command works anywhere inside a project, which
 /// is the difference between a tool you use and a tool you remember to cd for.
+///
+/// A store found that way is the session's rules, so it has to be this account's (2, 2026-11-10).
+/// Before, the first `.cyberbrain/notes` above the working directory was taken, whoever it
+/// belonged to: one left in /tmp or a shared parent put another account's ring 0 into the
+/// session as the operator's invariants. Now, as git does with a repository it does not own:
+///
+/// - the first store met must be owned by the effective user and writable by nobody else
+///   (no world write, and group write only for the user's own primary group, which is what
+///   a umask of 002 with per-user groups gives); otherwise the walk stops with an error that
+///   names it, and `--store` opens it on purpose;
+/// - the walk does not go above the home directory when it started inside it;
+/// - it does not cross into another file system.
+///
+/// It does not stop at a git root: a store at the root of a project often sits above a
+/// nested repository (a frontend in its own repo, a submodule), and that is the case the walk
+/// is for. On Windows ownership is not checked (it would need the security API, a dependency
+/// this tool does not take); the README says so.
 pub fn find_store(explicit: Option<PathBuf>, from: &Path) -> Result<PathBuf> {
     if let Some(p) = explicit {
         return Ok(p);
     }
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from);
+    discover(from, Account::current(), home.as_deref())
+}
+
+/// Who is looking for a store: effective uid and gid. `None` where that is not checked.
+#[derive(Clone, Copy, Debug)]
+pub struct Account {
+    pub uid: u32,
+    pub gid: u32,
+}
+
+impl Account {
+    #[cfg(unix)]
+    pub fn current() -> Option<Self> {
+        // SAFETY: geteuid and getegid cannot fail and touch no memory.
+        Some(unsafe {
+            Account {
+                uid: libc::geteuid(),
+                gid: libc::getegid(),
+            }
+        })
+    }
+
+    #[cfg(not(unix))]
+    pub fn current() -> Option<Self> {
+        None
+    }
+}
+
+/// [`find_store`]'s walk, for a given account and home directory.
+pub fn discover(from: &Path, me: Option<Account>, home: Option<&Path>) -> Result<PathBuf> {
+    let home = home.filter(|h| from.starts_with(h));
+    let start_dev = device(from);
     for dir in from.ancestors() {
+        if start_dev.is_some() && device(dir) != start_dev {
+            break;
+        }
         let candidate = dir.join(STORE_DIR);
         if candidate.join("notes").is_dir() {
+            if let Some(why) = refused(&candidate, me) {
+                bail!(
+                    "not using the store at {}: {why}. A store found by walking up has to be \
+                     yours and writable only by you; open it on purpose with --store or \
+                     CYBERBRAIN_STORE if you mean it, or run `cbl init` in your project",
+                    candidate.display()
+                );
+            }
             return Ok(candidate);
+        }
+        if home.is_some_and(|h| dir == h) {
+            break;
         }
     }
     bail!(
-        "no store found in {} or any directory above it; run `cbl init` in your project",
-        from.display()
+        "no store found in {} or any directory above it{}; run `cbl init` in your project",
+        from.display(),
+        if home.is_some() {
+            " up to your home directory"
+        } else {
+            ""
+        }
     )
+}
+
+#[cfg(unix)]
+fn device(p: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(p).ok().map(|m| m.dev())
+}
+
+#[cfg(not(unix))]
+fn device(_: &Path) -> Option<u64> {
+    None
+}
+
+/// Why `store` may not be taken by `me`, or `None` when it may.
+#[cfg(unix)]
+fn refused(store: &Path, me: Option<Account>) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    let me = me?;
+    let notes = store.join("notes");
+    let dirs = [
+        store.to_path_buf(),
+        notes.clone(),
+        notes.join("r0"),
+        notes.join("r1"),
+    ];
+    for dir in dirs {
+        let Ok(meta) = std::fs::metadata(&dir) else {
+            continue;
+        };
+        let mode = meta.mode() & 0o7777;
+        if meta.uid() != me.uid {
+            return Some(format!(
+                "{} belongs to uid {}, not to you (uid {})",
+                dir.display(),
+                meta.uid(),
+                me.uid
+            ));
+        }
+        if mode & 0o002 != 0 || (mode & 0o020 != 0 && meta.gid() != me.gid) {
+            return Some(format!(
+                "{} can be written by others (mode {mode:04o})",
+                dir.display()
+            ));
+        }
+    }
+    None
+}
+
+#[cfg(not(unix))]
+fn refused(_: &Path, _: Option<Account>) -> Option<String> {
+    None
 }
 
 /// Open the index, and say in Light's words what to do when that fails (1, 2026-11-10).
