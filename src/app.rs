@@ -329,14 +329,20 @@ impl App {
 
     /// Create the layout and the config, then open it. Running it twice is not an error and
     /// keeps whatever is already there.
+    /// On a store with a `light.toml`, that file is kept and is what applies: `cap` is for a
+    /// new store only, and the report says the cap the store has.
     pub fn init(root: &Path, cap: usize) -> Result<(Self, bool)> {
         let existed = root.join("notes").is_dir();
-        let store = Store::create(root, cap)
-            .with_context(|| format!("creating the store at {}", root.display()))?;
-        let cfg = LightConfig {
-            resident_cap_tokens: cap,
-            ..LightConfig::default()
+        let cfg = if root.join(CONFIG_FILE).exists() {
+            LightConfig::load(root)?
+        } else {
+            LightConfig {
+                resident_cap_tokens: cap,
+                ..LightConfig::default()
+            }
         };
+        let store = Store::create(root, cfg.resident_cap_tokens)
+            .with_context(|| format!("creating the store at {}", root.display()))?;
         if !root.join(CONFIG_FILE).exists() {
             cfg.write(root)?;
         }
@@ -442,7 +448,21 @@ impl App {
 
         let (blocks, oversized) = blocks_of(&note, MAX_BLOCK_TOKENS);
         let outcome = self.index.upsert_note(&note, &blocks, None)?;
+        // Written all the same, since the person may mean it; but told that no session will
+        // see it, only its name in the closing line.
+        let warning = if note.front.ring.is_resident() {
+            crate::hook::too_long_to_show(&note).map(|chars| {
+                format!(
+                    "this resident note takes ~{chars} characters at session start, and Claude \
+                     Code shows at most 10,000 there: the hook will name it instead of showing \
+                     it. Split it, or move what is not a rule to ring 2"
+                )
+            })
+        } else {
+            None
+        };
         Ok(Written {
+            warning,
             id: note.front.id,
             name,
             ring: note.front.ring,
@@ -853,6 +873,8 @@ pub struct Written {
     pub blocks: usize,
     pub links: usize,
     pub oversized: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 #[derive(Serialize, Default)]

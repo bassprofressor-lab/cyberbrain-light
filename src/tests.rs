@@ -1631,3 +1631,139 @@ fn a_name_used_twice_is_skipped_and_the_scan_finishes() {
     let d = app.doctor(true).expect("doctor --fix finishes too");
     assert!(d.repaired.is_some() || !d.findings.is_empty());
 }
+
+// ----- smaller things (0.2.2) --------------------------------------------------------
+
+/// `n` in light.toml was written by `init` and documented, and nothing read it: recall
+/// always returned up to 8.
+#[test]
+fn the_n_setting_is_what_recall_returns_by_default() {
+    let (_d, root) = store(8192);
+    LightConfig {
+        n: 2,
+        ..LightConfig::default()
+    }
+    .write(&root)
+    .unwrap();
+    let mut app = App::open(&root).unwrap();
+    for i in 0..5 {
+        write(&mut app, 2, &format!("otter-{i}"), "otter facts");
+    }
+    drop(app);
+    let mut s = mcp_server(&root);
+    let text = tool_text(&mut s, 1, "recall", r#"{"query":"otter"}"#);
+    assert_eq!(text.matches("otter-").count(), 2, "{text}");
+}
+
+/// `init` on a store that has a light.toml keeps the file, and must also keep using it: it
+/// reported, and for that run applied, the `--cap` given instead.
+#[test]
+fn init_on_an_existing_store_reports_the_cap_it_has() {
+    let (_d, root) = store(4096);
+    let (app, existed) = App::init(&root, 8192).unwrap();
+    assert!(existed);
+    assert_eq!(app.cfg.resident_cap_tokens, 4096);
+    assert_eq!(app.store.resident_cap(), 4096);
+}
+
+/// A resident note longer than the hook can show is written (the person may mean it), but
+/// the writer is told that no session will see it whole.
+#[test]
+fn writing_a_resident_note_the_hook_cannot_show_says_so() {
+    let (_d, root) = store(100_000);
+    let mut app = App::open(&root).unwrap();
+    let w = app
+        .write_note(WriteRequest {
+            ring: Ring::Invariant,
+            kind: NoteKind::Decision,
+            name: "huge-rule".into(),
+            body: "rule ".repeat(2500),
+            tags: vec![],
+        })
+        .unwrap();
+    let text = crate::render::written_text(&w);
+    assert!(text.contains("10,000"), "{text}");
+    let w = app
+        .write_note(WriteRequest {
+            ring: Ring::Invariant,
+            kind: NoteKind::Decision,
+            name: "small-rule".into(),
+            body: "Never on a Friday.".into(),
+            tags: vec![],
+        })
+        .unwrap();
+    assert!(!crate::render::written_text(&w).contains("10,000"));
+}
+
+/// MCP edge cases: a line that is JSON but not an object is an invalid request, not a
+/// notification to be ignored; `n` as a string is refused rather than read as the default;
+/// an empty body is not a note.
+#[test]
+fn mcp_answers_what_it_cannot_take_instead_of_ignoring_it() {
+    let (_d, root) = store(8192);
+    let mut s = mcp_server(&root);
+    for line in ["[1,2]", "42", "\"ping\""] {
+        let v = rpc(&mut s, line).unwrap_or_else(|| panic!("no answer to {line}"));
+        assert_eq!(v["error"]["code"], -32600, "{v}");
+    }
+    let r = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"recall","arguments":{"query":"x","n":"5"}}}"#,
+    )
+    .unwrap();
+    assert_eq!(r["result"]["isError"], true, "{r}");
+    let r = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write","arguments":{"ring":2,"kind":"knowledge","name":"empty","body":"  "}}}"#,
+    )
+    .unwrap();
+    assert_eq!(r["result"]["isError"], true, "{r}");
+    assert!(App::open(&root).unwrap().store.read("empty").is_err());
+}
+
+/// Note text reaches the terminal as it is written, and a note can come from outside: an
+/// escape sequence in it could rewrite what the person sees. Control characters are shown,
+/// not obeyed.
+#[test]
+fn control_characters_in_a_note_are_shown_not_obeyed() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(
+        &mut app,
+        4,
+        "escape",
+        "harmless \u{1b}[2J\u{1b}[31mcleared screen\u{7} text",
+    );
+    let text = crate::render::hits_text(&app.recall("harmless", 5, None).unwrap());
+    assert!(
+        !text.contains('\u{1b}') && !text.contains('\u{7}'),
+        "{text:?}"
+    );
+    let cit = app.recall("harmless", 1, None).unwrap().hits[0]
+        .citation
+        .clone();
+    let e = crate::render::expanded_text(&app.expand(&cit).unwrap());
+    assert!(!e.contains('\u{1b}'), "{e:?}");
+    assert!(e.contains("cleared screen"));
+}
+
+/// A line that is not UTF-8 ended the MCP server (the `lines()` iterator returned an error
+/// and `?` passed it on). It is answered with a parse error, and the next line still works.
+#[test]
+fn mcp_survives_a_line_that_is_not_utf8() {
+    let (_d, root) = store(8192);
+    let mut input: Vec<u8> =
+        b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"x\":\"\xff\xfe\"}\n".to_vec();
+    input.extend_from_slice(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n");
+    let mut out = Vec::new();
+    crate::mcp::serve_io(root, &input[..], &mut out).expect("still serving");
+    let lines: Vec<Value> = String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert_eq!(lines[0]["error"]["code"], -32700);
+    assert_eq!(lines[1]["id"], 2);
+    assert!(lines[1]["result"].is_object());
+}

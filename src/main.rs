@@ -91,8 +91,9 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Init { cap } => {
             let root = cli.store.unwrap_or_else(|| cwd.join(STORE_DIR));
             let (app, existed) = App::init(&root, cap)?;
+            let cap = app.cfg.resident_cap_tokens;
             let text = format!(
-                "{} store at {}\nnext: cbl write --ring 2 --kind knowledge --name first-note \
+                "{} store at {} (resident cap {cap} tokens)\nnext: cbl write --ring 2 --kind knowledge --name first-note \
                  --body 'what you learned', then cbl recall 'what you learned'",
                 if existed { "kept" } else { "created" },
                 app.store.root().display()
@@ -101,7 +102,7 @@ fn run(cli: Cli) -> Result<()> {
                 emit(serde_json::json!({
                     "store": app.store.root().display().to_string(),
                     "created": !existed,
-                    "resident_cap_tokens": cap,
+                    "resident_cap_tokens": app.cfg.resident_cap_tokens,
                 }))?;
             } else {
                 say(text);
@@ -166,7 +167,7 @@ fn run(cli: Cli) -> Result<()> {
                 }
                 (None, Some(q)) => {
                     let ring = ring.map(Ring::try_from).transpose()?;
-                    let result = app.recall(&q, n, ring)?;
+                    let result = app.recall(&q, n.unwrap_or(app.cfg.n).max(1), ring)?;
                     if cli.json {
                         emit(serde_json::json!({
                             "hits": result.hits,

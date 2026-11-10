@@ -72,9 +72,9 @@ pub enum Cmd {
         /// Expand a citation to its full note instead of searching.
         #[arg(long, value_name = "CITATION")]
         id: Option<String>,
-        /// How many hits to return.
-        #[arg(long, short, default_value_t = 8)]
-        n: usize,
+        /// How many hits to return. Defaults to `n` in light.toml (8).
+        #[arg(long, short)]
+        n: Option<usize>,
         /// Restrict to exactly this ring.
         #[arg(long, value_parser = clap::value_parser!(u8).range(0..=4))]
         ring: Option<u8>,

@@ -185,6 +185,29 @@ fn trailer(left_out: &[String]) -> String {
     format!("{TRAILER_HEAD}{}{more}{TRAILER_TAIL}", shown.join(", "))
 }
 
+/// One resident note as the session start shows it: a heading, then each block under its
+/// citation.
+pub fn note_piece(note: &cyberbrain_core::types::Note) -> String {
+    let mut piece = format!(
+        "## r{} `{}` ({})\n\n",
+        note.front.ring.as_u8(),
+        note.front.name,
+        note.front.updated.strftime("%Y-%m-%d")
+    );
+    let (blocks, _) = blocks_of(note, MAX_BLOCK_TOKENS);
+    for b in blocks {
+        piece.push_str(&format!("[{}]\n{}\n\n", b.citation, b.text.trim()));
+    }
+    piece
+}
+
+/// Whether a resident note is too long to be shown at session start at all, whatever else is
+/// there: the warning `cbl write` gives for it.
+pub fn too_long_to_show(note: &cyberbrain_core::types::Note) -> Option<usize> {
+    let chars = note_piece(note).chars().count();
+    (chars > CONTEXT_CHAR_CAP).then_some(chars)
+}
+
 /// Rings 0 and 1, rendered with their citations, cut at the token cap and at the character
 /// cap, whichever comes first.
 ///
@@ -240,16 +263,7 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
                      which searches rings 2 to 4 by keyword.\n\n",
                 );
             }
-            piece.push_str(&format!(
-                "## r{} `{}` ({})\n\n",
-                ring.as_u8(),
-                note.front.name,
-                note.front.updated.strftime("%Y-%m-%d")
-            ));
-            let (blocks, _) = blocks_of(&note, MAX_BLOCK_TOKENS);
-            for b in blocks {
-                piece.push_str(&format!("[{}]\n{}\n\n", b.citation, b.text.trim()));
-            }
+            piece.push_str(&note_piece(&note));
             if chars + piece.chars().count() > CONTEXT_CHAR_CAP {
                 too_long.push(format!("r{}/{}", ring.as_u8(), note.front.name));
                 continue;

@@ -34,17 +34,38 @@ const INSTRUCTIONS: &str = "Cyberbrain Light is this project's memory. Search it
 /// Serve until stdin closes. Errors inside a request become JSON-RPC errors; only a broken
 /// stdout ends the loop.
 pub fn serve(store_root: PathBuf) -> Result<()> {
-    let stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
+    serve_io(store_root, std::io::stdin().lock(), std::io::stdout())
+}
+
+/// [`serve`] over any reader and writer. A line is read as bytes, so one that is not UTF-8 is
+/// answered with a parse error and the server goes on; before 0.2.2 it ended the server.
+pub(crate) fn serve_io(
+    store_root: PathBuf,
+    mut input: impl BufRead,
+    mut output: impl Write,
+) -> Result<()> {
     let mut server = Server { store_root };
-    for line in stdin.lock().lines() {
-        let line = line?;
-        if line.trim().is_empty() {
-            continue;
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        if input.read_until(b'\n', &mut buf)? == 0 {
+            break;
         }
-        if let Some(response) = server.handle_line(&line) {
-            writeln!(stdout, "{response}")?;
-            stdout.flush()?;
+        let response = match std::str::from_utf8(&buf) {
+            Ok(line) if line.trim().is_empty() => continue,
+            Ok(line) => server.handle_line(line.trim_end_matches(['\n', '\r'])),
+            Err(e) => Some(
+                error_response(
+                    &Value::Null,
+                    -32700,
+                    &format!("parse error: not UTF-8 ({e})"),
+                )
+                .to_string(),
+            ),
+        };
+        if let Some(response) = response {
+            writeln!(output, "{response}")?;
+            output.flush()?;
         }
     }
     Ok(())
@@ -65,6 +86,18 @@ impl Server {
                 );
             }
         };
+        // A message is an object. Anything else is an invalid request, answered, not taken
+        // for a notification and passed over in silence (batches are not supported).
+        if !msg.is_object() {
+            return Some(
+                error_response(
+                    &Value::Null,
+                    -32600,
+                    "invalid request: a message is one JSON object per line",
+                )
+                .to_string(),
+            );
+        }
         let id = msg.get("id").cloned().unwrap_or(Value::Null);
         let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
         let params = msg.get("params").cloned().unwrap_or(json!({}));
@@ -183,7 +216,7 @@ impl Server {
                 "isError": false,
             })),
             Err(e) => Ok(json!({
-                "content": [{ "type": "text", "text": e.to_string() }],
+                "content": [{ "type": "text", "text": format!("{e:#}") }],
                 "isError": true,
             })),
         }
@@ -203,7 +236,12 @@ impl Server {
                 // only where a hook injects them (6, 2026-11-10): `App::resident_injected`.
                 let mut app = App::open(root)?;
                 app.agent = true;
-                let n = args.get("n").and_then(Value::as_u64).unwrap_or(8) as usize;
+                let n = match args.get("n") {
+                    None | Some(Value::Null) => app.cfg.n,
+                    Some(v) => v.as_u64().ok_or_else(|| {
+                        anyhow::anyhow!("`n` must be a whole number of hits, not {v}")
+                    })? as usize,
+                };
                 let ring = match args.get("ring") {
                     None | Some(Value::Null) => None,
                     Some(v) => Some(ring_of(v)?),
@@ -238,6 +276,9 @@ impl Server {
                     "" | "knowledge" => NoteKind::Knowledge,
                     other => anyhow::bail!("unknown kind `{other}`"),
                 };
+                if s("body").trim().is_empty() {
+                    anyhow::bail!("write needs a `body` with text; an empty note is not a note");
+                }
                 let w = app.write_note(crate::app::WriteRequest {
                     ring,
                     kind,
