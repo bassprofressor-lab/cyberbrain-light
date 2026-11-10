@@ -97,6 +97,38 @@ pub fn find_store(explicit: Option<PathBuf>, from: &Path) -> Result<PathBuf> {
     )
 }
 
+/// Open the index, and say in Light's words what to do when that fails (1, 2026-11-10).
+///
+/// The index library's own message for an index newer than the build ends in "delete the
+/// index and rescan". For a store shared with the full Cyberbrain that is the wrong advice:
+/// the index is the store's, the full product may keep in it what the notes do not give back,
+/// and the right move is a newer `cbl`. So that error is replaced, not wrapped, and no other
+/// error here suggests deleting anything either.
+fn open_index(path: &Path) -> Result<Index> {
+    match Index::open(path) {
+        Ok(index) => Ok(index),
+        Err(cyberbrain_core::Error::Index(msg))
+            if msg.starts_with("database schema is version") =>
+        {
+            let found = msg.split_whitespace().nth(4).unwrap_or("?");
+            bail!(
+                "the index at {} has schema version {found}, newer than the version {} that \
+                 cbl {} reads: a newer Cyberbrain wrote it. Upgrade cbl \
+                 (`cargo install cyberbrain-light`); the notes and the index are fine as they \
+                 are and should stay where they are",
+                path.display(),
+                cyberbrain_index::SCHEMA_VERSION,
+                env!("CARGO_PKG_VERSION"),
+            )
+        }
+        Err(e) => Err(anyhow::Error::new(e).context(format!(
+            "opening the index at {}; `cbl scan --full` rebuilds it from the notes, and if it \
+             cannot be opened at all, a newer cbl may be what it needs",
+            path.display()
+        ))),
+    }
+}
+
 pub struct App {
     pub store: Store,
     pub index: Index,
@@ -124,8 +156,7 @@ impl App {
         let cfg = LightConfig::load(root)?;
         let store = Store::with_cap(root, cfg.resident_cap_tokens)
             .with_context(|| format!("opening the store at {}", root.display()))?;
-        let index = Index::open(&store.db_path())
-            .with_context(|| format!("opening the index at {}", store.db_path().display()))?;
+        let index = open_index(&store.db_path())?;
         Ok(Self {
             store,
             index,
@@ -147,7 +178,7 @@ impl App {
         if !root.join(CONFIG_FILE).exists() {
             cfg.write(root)?;
         }
-        let index = Index::open(&store.db_path())?;
+        let index = open_index(&store.db_path())?;
         Ok((
             Self {
                 store,

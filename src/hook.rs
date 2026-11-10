@@ -50,11 +50,27 @@ pub fn run(event: HookEvent, store_root: &Path, stdin: &str) -> Result<HookOutpu
     let app = match App::open(store_root) {
         Ok(a) => a,
         Err(e) => {
-            // No store is the normal state of a project that has not opted in. Say so once,
-            // quietly, and let the session continue.
+            // A directory without `notes/` is no store, which is the normal state of a project
+            // that has not opted in: said on stderr, nothing for the model.
+            //
+            // A store that is there and does not open is different (1, 2026-11-10): an index
+            // from a newer Cyberbrain left the session without its invariants and said nothing
+            // to the model, which then worked as if there were none. It is told now, briefly,
+            // and the whole error chain goes to stderr for the human.
+            let notes = vec![format!(
+                "no usable store at {}: {e:#}",
+                store_root.display()
+            )];
+            let is_store = store_root.join("notes").is_dir();
+            if !is_store || event == HookEvent::PreCompact {
+                return Ok(HookOutput {
+                    stdout: String::new(),
+                    notes,
+                });
+            }
             return Ok(HookOutput {
-                stdout: String::new(),
-                notes: vec![format!("no usable store at {}: {e}", store_root.display())],
+                stdout: context_json(event, &unusable_store_context(store_root, &e)),
+                notes,
             });
         }
     };
@@ -70,13 +86,7 @@ pub fn run(event: HookEvent, store_root: &Path, stdin: &str) -> Result<HookOutpu
                 });
             }
             Ok(HookOutput {
-                stdout: json!({
-                    "hookSpecificOutput": {
-                        "hookEventName": harness_name(event),
-                        "additionalContext": context,
-                    }
-                })
-                .to_string(),
+                stdout: context_json(event, &context),
                 notes,
             })
         }
@@ -98,6 +108,32 @@ pub fn run(event: HookEvent, store_root: &Path, stdin: &str) -> Result<HookOutpu
             })
         }
     }
+}
+
+fn context_json(event: HookEvent, context: &str) -> String {
+    json!({
+        "hookSpecificOutput": {
+            "hookEventName": harness_name(event),
+            "additionalContext": context,
+        }
+    })
+    .to_string()
+}
+
+/// What the model is told when the store is there and cannot be opened. Short: the reason is
+/// the first line of the error, at most a few hundred characters, and the rest is on stderr.
+fn unusable_store_context(root: &Path, e: &anyhow::Error) -> String {
+    let mut reason: String = e.to_string().chars().take(600).collect();
+    if reason.len() < e.to_string().len() {
+        reason.push('…');
+    }
+    format!(
+        "# Cyberbrain Light\n\nThe project memory at {} could not be opened, so rings 0 and 1 \
+         (the operator's rules for this project) are NOT in this session. Reason: {reason}\n\n\
+         Tell the user before relying on anything those rules might cover. `cbl status` shows \
+         the full error. Do not remove or rebuild anything under the store yourself.\n",
+        root.display()
+    )
 }
 
 /// Claude Code shows a hook's `additionalContext` in full up to 10,000 characters; past that

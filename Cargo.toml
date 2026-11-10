@@ -20,8 +20,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.6", features = ["derive", "env"] }
-cyberbrain-core = "0.7.10"
-cyberbrain-index = "0.7.10"
+cyberbrain-core = "0.10.1"
+cyberbrain-index = "0.10.1"
 jiff = { version = "0.2.35", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 # `preserve_order`: `cbl install` rewrites a settings.json that belongs to the user, and
@@ -30,6 +30,9 @@ serde_json = { version = "1.0.151", features = ["preserve_order"] }
 toml = "1.1.5"
 
 [dev-dependencies]
+# The schema tests set up an index the way an older or a newer Cyberbrain left it. The same
+# version cyberbrain-index links, so nothing new is built.
+rusqlite = "0.41.1"
 tempfile = "3.27.0"
 
 [profile.release]

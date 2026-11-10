@@ -1178,3 +1178,99 @@ fn cargo_deny_has_a_config_and_runs_in_ci_every_week() {
     );
     assert!(ci.contains("schedule:"), "advisories arrive without a push");
 }
+
+// ----- store compatibility (0.2.2) ---------------------------------------------------
+
+fn sql(root: &Path, statements: &str) {
+    let conn = rusqlite::Connection::open(root.join("cyberbrain.db")).unwrap();
+    conn.execute_batch(statements).unwrap();
+}
+
+fn schema_of(root: &Path) -> u32 {
+    let conn = rusqlite::Connection::open(root.join("cyberbrain.db")).unwrap();
+    conn.query_row(
+        "SELECT value FROM meta WHERE key = 'schema_version'",
+        [],
+        |r| r.get::<_, String>(0),
+    )
+    .unwrap()
+    .parse()
+    .unwrap()
+}
+
+/// 1 (2026-11-10): Cyberbrain 0.10 writes index schema 6; Light 0.2.1 understood 5, refused
+/// every store the full product had touched, and the session-start hook said nothing to the
+/// model about it. Here the index is brought to what 0.10.1 leaves behind.
+#[test]
+fn a_store_cyberbrain_0_10_wrote_opens() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "pg18", "The postgres data directory moved.");
+    drop(app);
+    if schema_of(&root) < 6 {
+        sql(
+            &root,
+            "ALTER TABLE blocks ADD COLUMN locator TEXT;
+             UPDATE meta SET value = '6' WHERE key = 'schema_version';",
+        );
+    }
+    let app = App::open(&root).expect("a schema 6 index opens");
+    assert_eq!(app.index.stats().unwrap().schema_version, 6);
+    let hits = app.recall("postgres", 5, None).unwrap().hits;
+    assert_eq!(hits.len(), 1);
+}
+
+/// And the other way: an index an older Light or Cyberbrain left at schema 5 is migrated on
+/// open, notes and all. (After that an older build refuses it; the CHANGELOG says so.)
+#[test]
+fn a_schema_5_index_is_migrated_and_keeps_its_notes() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "pg18", "The postgres data directory moved.");
+    drop(app);
+    if schema_of(&root) == 6 {
+        sql(
+            &root,
+            "ALTER TABLE blocks DROP COLUMN locator;
+             UPDATE meta SET value = '5' WHERE key = 'schema_version';",
+        );
+    }
+    assert_eq!(schema_of(&root), 5);
+    let app = App::open(&root).unwrap();
+    assert_eq!(schema_of(&root), 6, "migrated on open");
+    assert_eq!(app.recall("postgres", 5, None).unwrap().hits.len(), 1);
+}
+
+/// An index newer than this build: the error says to upgrade, never to delete the index (it
+/// belongs to the store, and a newer Cyberbrain keeps more in it than the notes give back),
+/// and the session-start hook tells the model that rings 0 and 1 are missing instead of
+/// staying silent.
+#[test]
+fn an_index_from_a_newer_cyberbrain_is_named_and_the_model_is_told() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "rule", "Never deploy on a Friday.");
+    drop(app);
+    sql(
+        &root,
+        "UPDATE meta SET value = '99' WHERE key = 'schema_version';",
+    );
+
+    let err = format!("{:#}", App::open(&root).err().expect("refused"));
+    assert!(err.contains("99"), "{err}");
+    assert!(err.contains("upgrade") || err.contains("Upgrade"), "{err}");
+    assert!(!err.to_lowercase().contains("delete"), "{err}");
+
+    let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).expect("the model is told");
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(ctx.contains("NOT"), "{ctx}");
+    assert!(!ctx.to_lowercase().contains("delete the index"), "{ctx}");
+    assert!(
+        out.notes.iter().any(|n| n.contains("99")),
+        "{:?}",
+        out.notes
+    );
+}
