@@ -42,7 +42,7 @@ The caveat is not an apology, it is the contract. Light searches for words, and 
 | | |
 |---|---|
 | [`cbl <command>`](commands/) | `init`, `write`, `scan`, `recall`, `forget`, `status`, `doctor`, all with `--json` |
-| [`cbl hook <event>`](claude-code/#the-session-start-hook) | `session-start` puts rings 0 and 1 into every new Claude Code session |
+| [`cbl hook <event>`](claude-code/#the-session-start-hook) | `session-start` and `subagent-start` put rings 0 and 1 into every new Claude Code session and subagent |
 | [`cbl mcp`](claude-code/#the-mcp-server) | Model Context Protocol over stdio: `recall`, `recall_id`, `write`, `status` |
 | [`cbl install`](claude-code/#cbl-install) | writes the hook into a project's `.claude/settings.json`, and takes it out again |
 

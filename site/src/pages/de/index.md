@@ -43,7 +43,7 @@ Der Hinweis am Ende ist keine Entschuldigung, sondern die Abmachung. Light sucht
 | | |
 |---|---|
 | [`cbl <befehl>`](commands/) | `init`, `write`, `scan`, `recall`, `forget`, `status`, `doctor`, alle mit `--json` |
-| [`cbl hook <ereignis>`](claude-code/#der-hook-beim-sitzungsstart) | `session-start` gibt Ring 0 und 1 in jede neue Claude-Code-Sitzung |
+| [`cbl hook <ereignis>`](claude-code/#der-hook-beim-sitzungsstart) | `session-start` und `subagent-start` geben Ring 0 und 1 in jede neue Claude-Code-Sitzung und jeden Unteragenten |
 | [`cbl mcp`](claude-code/#der-mcp-server) | Model Context Protocol über stdio: `recall`, `recall_id`, `write`, `status` |
 | [`cbl install`](claude-code/#cbl-install) | trägt den Hook in die `.claude/settings.json` eines Projekts ein und wieder aus |
 

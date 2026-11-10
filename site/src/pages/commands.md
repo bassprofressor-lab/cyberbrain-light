@@ -57,7 +57,7 @@ Rebuild the index from the notes tree. Use it after editing notes by hand or aft
 
 ## recall
 
-Search the store. When an agent asks (Claude Code sets `CLAUDECODE`, or set `CYBERBRAIN_AGENT`), rings 0 and 1 are left out: the agent already has them from the session start. At a terminal you get every ring. `--ring` searches exactly one ring, 0 and 1 included.
+Search the store. When an agent asks (Claude Code sets `CLAUDECODE`, or set `CYBERBRAIN_AGENT`), rings 0 and 1 are left out where the project carries the session- and subagent-start hooks of Light or Cyberbrain: the agent already has them. Without those hooks, and at a terminal, you get every ring. Notes from outside (`trust:untrusted`), replaced notes and notes no longer valid are marked as such. `--ring` searches exactly one ring, 0 and 1 included.
 
 ```text
 cbl recall [QUERY] [--id <CITATION>] [-n <N>] [--ring <RING>]
@@ -95,7 +95,7 @@ Report the store's footprint and tidy it up.
 Answer an agent lifecycle hook. Reads the event payload on stdin. Claude Code calls this, not you; see [hooks and MCP](../claude-code/).
 
 ```text
-cbl hook <session-start | pre-compact>
+cbl hook <session-start | subagent-start | pre-compact>
 ```
 
 `pre-compact` is still accepted so that hooks written by version 0.1 keep working, but `cbl install` no longer writes it: Claude Code discards a PreCompact hook's message.

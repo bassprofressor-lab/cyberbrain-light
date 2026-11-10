@@ -14,10 +14,10 @@ Light erreicht den Agenten auf zwei Wegen. Der **Hook** gibt die Regeln vor dem 
 
 ```console
 $ cbl install
-1 hook(s) in /pfad/zum/projekt/.claude/settings.json pointing at /home/du/.cargo/bin/cbl
+2 hook(s) in /pfad/zum/projekt/.claude/settings.json pointing at /home/du/.cargo/bin/cbl
 ```
 
-Es fügt genau einen Eintrag hinzu und lässt den Rest der Datei in Ruhe:
+Es fügt zwei Einträge hinzu, einen für den Sitzungsstart und einen für jeden Unteragenten, und lässt den Rest der Datei in Ruhe:
 
 ```json
 {
@@ -35,16 +35,30 @@ Es fügt genau einen Eintrag hinzu und lässt den Rest der Datei in Ruhe:
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "_managedBy": "cyberbrain-light",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/du/.cargo/bin/cbl",
+            "args": ["hook", "subagent-start"],
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }
 ```
 
-An der Markierung `_managedBy` erkennt `cbl install --undo` seine eigenen Einträge; fremde fasst es nicht an. Eingetragen wird der absolute Pfad des Programms, das `install` ausgeführt hat. Wer `cbl` verschiebt oder neu installiert, ruft `cbl install` noch einmal auf. Seit 0.2.0 hat der Hook eine Zeitgrenze von 30 Sekunden (Vorgabe von Claude Code: 600 s), und ein alter PreCompact-Eintrag aus 0.1 wird entfernt.
+An der Markierung `_managedBy` erkennt `cbl install --undo` seine eigenen Einträge; fremde fasst es nicht an. Eingetragen wird der absolute Pfad des Programms, das `install` ausgeführt hat. Wer `cbl` verschiebt oder neu installiert, ruft `cbl install` noch einmal auf. Seit 0.2.0 hat der Hook eine Zeitgrenze von 30 Sekunden (Vorgabe von Claude Code: 600 s), und ein alter PreCompact-Eintrag aus 0.1 wird entfernt. Seit 0.2.2 trägt es zusätzlich den SubagentStart-Eintrag ein; in Projekten, die vorher eingerichtet wurden, `cbl install` noch einmal aufrufen. Ist die `settings.json` ein symbolischer Link, ersetzt `install` ihn nicht, sondern bricht mit Meldung ab, und die Datei behält ihre Rechte.
 
 ## Der Hook beim Sitzungsstart
 
-Bei jeder neuen Sitzung ruft Claude Code `cbl hook session-start` auf, und Light antwortet mit den Ringen 0 und 1: den festen Regeln und dem aktuellen Ablauf. Dabei gelten zwei Grenzen:
+Bei jeder neuen Sitzung ruft Claude Code `cbl hook session-start` auf, bei jedem Unteragenten `cbl hook subagent-start`, und Light antwortet mit den Ringen 0 und 1: den festen Regeln und dem aktuellen Ablauf. Dabei gelten zwei Grenzen:
 
 - der **Token-Deckel** aus `light.toml` (`resident_cap_tokens`, Vorgabe 8.192) und
 - die **10.000 Zeichen**, die Claude Code vom Kontext eines Hooks vollständig zeigt. Darüber hinaus zeigt es nur eine Vorschau von 2.000 Zeichen. Light lässt deshalb lieber Notizen weg, als den ganzen Block abschneiden zu lassen, und nennt die fehlenden dort, wo das Modell es liest.

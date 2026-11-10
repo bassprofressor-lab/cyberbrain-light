@@ -58,7 +58,7 @@ Baut den Index aus dem Notizbaum neu. Nötig nach Änderungen von Hand oder nach
 
 ## recall
 
-Durchsucht den Store. Fragt ein Agent (Claude Code setzt `CLAUDECODE`, oder `CYBERBRAIN_AGENT` setzen), bleiben Ring 0 und 1 weg, denn die hat er schon vom Sitzungsstart. Am Terminal bekommst du alle Ringe. `--ring` durchsucht genau einen Ring, auch 0 und 1.
+Durchsucht den Store. Fragt ein Agent (Claude Code setzt `CLAUDECODE`, oder `CYBERBRAIN_AGENT` setzen), bleiben Ring 0 und 1 weg, sofern das Projekt die Hooks für Sitzungs- und Unteragentenstart von Light oder Cyberbrain trägt: dann hat er sie schon. Ohne diese Hooks und am Terminal bekommst du alle Ringe. Notizen von außen (`trust:untrusted`), ersetzte und nicht mehr gültige Notizen sind als solche markiert. `--ring` durchsucht genau einen Ring, auch 0 und 1.
 
 ```text
 cbl recall [ANFRAGE] [--id <ZITAT>] [-n <N>] [--ring <RING>]
@@ -96,7 +96,7 @@ Zeigt, wie viel Platz der Store braucht, und räumt auf.
 Beantwortet ein Ereignis im Ablauf des Agenten und liest dazu die Daten von stdin. Das ruft Claude Code auf, nicht du; siehe [Hooks und MCP](../claude-code/).
 
 ```text
-cbl hook <session-start | pre-compact>
+cbl hook <session-start | subagent-start | pre-compact>
 ```
 
 `pre-compact` wird weiter angenommen, damit Hooks aus Version 0.1 nicht brechen. `cbl install` trägt ihn aber nicht mehr ein, weil Claude Code die Meldung eines PreCompact-Hooks verwirft.

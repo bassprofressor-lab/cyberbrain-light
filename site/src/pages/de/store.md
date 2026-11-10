@@ -25,7 +25,7 @@ slug: "store/"
 
 Maßgeblich sind die Notizen, der Index wird aus ihnen gebaut. Soll das Team das Gedächtnis teilen, kommt `notes/` mit ins Repository, `cyberbrain.db` nicht.
 
-Jeder Befehl sucht den Store vom Arbeitsverzeichnis aufwärts und funktioniert deshalb überall im Projekt. Mit `--store` oder `CYBERBRAIN_STORE` geht es auch woanders hin.
+Jeder Befehl sucht den Store vom Arbeitsverzeichnis aufwärts und funktioniert deshalb überall im Projekt. Den ersten `.cyberbrain`, den er findet, nimmt er nur, wenn er dir gehört: Eigentümer ist dein Konto, und niemand sonst darf hineinschreiben (Gruppenschreibrecht nur für deine eigene Hauptgruppe). Über dein Home-Verzeichnis und über eine Dateisystemgrenze hinaus sucht er nicht; ein Store, der die Prüfung nicht besteht, wird genannt und nicht benutzt. Mit `--store` oder `CYBERBRAIN_STORE` geht es bewusst auch woanders hin. Unter Windows wird der Eigentümer nicht geprüft.
 
 ## Ringe
 
@@ -66,4 +66,4 @@ Unabhängig vom Token-Deckel bleibt der Hook beim Sitzungsstart unter den 10.000
 
 ## Gemeinsam mit dem vollen Cyberbrain
 
-Der Aufbau des Stores ist der von Cyberbrain: gleiches Verzeichnis, gleiches Markdown, gleiche Ringe. Zitate sind Kennungen von Abschnitten, und ein neueres Cyberbrain teilt Notizen womöglich etwas anders auf. Nach einem vollen `cyberbrain scan` können sich deshalb einzelne Zitate ändern, die Notizen nicht. Wer mit Light anfängt und später [Cyberbrain](../light-or-full/) installiert, holt mit einem `cyberbrain scan` alle bisherigen Notizen herein. Light hält seine Einstellungen in `light.toml` und fasst die `cyberbrain.toml` des vollen Produkts nicht an.
+Der Aufbau des Stores ist der von Cyberbrain: gleiches Verzeichnis, gleiches Markdown, gleiche Ringe. Zitate sind Kennungen von Abschnitten, und ein neueres Cyberbrain teilt Notizen womöglich etwas anders auf. Nach einem vollen `cyberbrain scan` können sich deshalb einzelne Zitate ändern, die Notizen nicht. Wer mit Light anfängt und später [Cyberbrain](../light-or-full/) installiert, holt mit einem `cyberbrain scan` alle bisherigen Notizen herein. Light 0.2.2 liest den Index von Cyberbrain 0.10 (Schema 6) und hebt einen älteren darauf an; danach öffnen Light 0.2.1 und Cyberbrain vor 0.10 ihn nicht mehr. Light hält seine Einstellungen in `light.toml` und fasst die `cyberbrain.toml` des vollen Produkts nicht an.

@@ -24,7 +24,7 @@ slug: "store/"
 
 The notes are the truth; the index is derived from them. Commit `notes/` with your code if the team should share the memory, and keep `cyberbrain.db` out of version control.
 
-Any command finds the store from the working directory upwards, so it works anywhere inside the project. `--store` or `CYBERBRAIN_STORE` point it somewhere else.
+Any command finds the store from the working directory upwards, so it works anywhere inside the project. It takes the first `.cyberbrain` it meets only if it is yours: owned by your account and writable by nobody else (group write only for your own primary group). The walk does not climb above your home directory or onto another file system; a store that fails the check is named and not used. `--store` or `CYBERBRAIN_STORE` point it somewhere else, on purpose. On Windows ownership is not checked.
 
 ## Rings
 
@@ -65,4 +65,4 @@ Independently of the token cap, the session-start hook stays under the 10,000 ch
 
 ## Shared with the full Cyberbrain
 
-The store layout is Cyberbrain's: same directory, same Markdown, same rings. Citations are block ids, and a newer Cyberbrain can split notes into blocks a little differently, so after a full `cyberbrain scan` some citations may change; the notes do not. Start with Light, install [Cyberbrain](../light-or-full/) later, and one `cyberbrain scan` picks up every note you already wrote. Light keeps its settings in `light.toml` and never touches Cyberbrain's `cyberbrain.toml`.
+The store layout is Cyberbrain's: same directory, same Markdown, same rings. Citations are block ids, and a newer Cyberbrain can split notes into blocks a little differently, so after a full `cyberbrain scan` some citations may change; the notes do not. Start with Light, install [Cyberbrain](../light-or-full/) later, and one `cyberbrain scan` picks up every note you already wrote. Light 0.2.2 reads the index of Cyberbrain 0.10 (schema 6) and brings an older one up to it; after that, Light 0.2.1 and Cyberbrain before 0.10 no longer open it. Light keeps its settings in `light.toml` and never touches Cyberbrain's `cyberbrain.toml`.

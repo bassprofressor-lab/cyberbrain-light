@@ -1,7 +1,7 @@
 ---
 layout: ../layouts/Doc.astro
 title: "Claude Code: hooks and MCP"
-description: "Connect Cyberbrain Light to Claude Code: the session-start hook, cbl install, and the MCP server with recall, recall_id, write and status."
+description: "Connect Cyberbrain Light to Claude Code: the session- and subagent-start hooks, cbl install, and the MCP server with recall, recall_id, write and status."
 slug: "claude-code/"
 ---
 
@@ -13,10 +13,10 @@ Light reaches the agent two ways. The **hook** puts the rules into every session
 
 ```console
 $ cbl install
-1 hook(s) in /path/to/project/.claude/settings.json pointing at /home/you/.cargo/bin/cbl
+2 hook(s) in /path/to/project/.claude/settings.json pointing at /home/you/.cargo/bin/cbl
 ```
 
-It adds one entry and leaves everything else in the file alone:
+It adds two entries, one for the session start and one for every subagent, and leaves everything else in the file alone:
 
 ```json
 {
@@ -34,16 +34,30 @@ It adds one entry and leaves everything else in the file alone:
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "_managedBy": "cyberbrain-light",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/you/.cargo/bin/cbl",
+            "args": ["hook", "subagent-start"],
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }
 ```
 
-The `_managedBy` marker is how `cbl install --undo` finds its own entries; it never touches one it did not write. The command is the absolute path of the binary that ran `install`, so move or reinstall `cbl` and run `cbl install` again. Since 0.2.0 the hook has a 30-second timeout (the harness default is 600 s), and an old PreCompact entry from 0.1 is taken out.
+The `_managedBy` marker is how `cbl install --undo` finds its own entries; it never touches one it did not write. The command is the absolute path of the binary that ran `install`, so move or reinstall `cbl` and run `cbl install` again. Since 0.2.0 the hook has a 30-second timeout (the harness default is 600 s), and an old PreCompact entry from 0.1 is taken out. Since 0.2.2 it also writes the SubagentStart entry, so run `cbl install` again in projects installed before; a `settings.json` that is a symbolic link is not replaced, `install` stops and says so, and the file keeps its permissions.
 
 ## The session-start hook
 
-On every new session Claude Code runs `cbl hook session-start`, and Light answers with rings 0 and 1: the operator's invariants and the current protocol. Two limits apply:
+On every new session Claude Code runs `cbl hook session-start`, and every subagent `cbl hook subagent-start`, and Light answers with rings 0 and 1: the operator's invariants and the current protocol. Two limits apply:
 
 - the **token cap** from `light.toml` (`resident_cap_tokens`, default 8,192), and
 - the **10,000 characters** Claude Code shows of a hook's context in full. Past that it shows only a 2,000-character preview, so Light leaves notes out rather than let the whole block be cut, and names the notes that did not fit where the model reads it.
