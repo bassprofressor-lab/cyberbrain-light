@@ -1,7 +1,7 @@
 //! `cbl install`: put the hook entry into a project's `.claude/settings.json`, and take it
 //! out again.
 //!
-//! Since 0.2.0 that is SessionStart only. The PreCompact entry spoke to the human through
+//! Since 0.2.0 that is SessionStart, since 0.2.2 SubagentStart too. The PreCompact entry spoke to the human through
 //! `systemMessage`, which Claude Code discards for that event: it did nothing. A run removes
 //! an entry an older version wrote there.
 //!
@@ -15,7 +15,12 @@ use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 
 pub const MANAGED_BY: &str = "cyberbrain-light";
-const EVENTS: [(&str, &str); 1] = [("SessionStart", "session-start")];
+/// SubagentStart since 0.2.2: a subagent does not inherit the session-start context, and
+/// recall leaves rings 0 and 1 out only where both are installed (6, 2026-11-10).
+const EVENTS: [(&str, &str); 2] = [
+    ("SessionStart", "session-start"),
+    ("SubagentStart", "subagent-start"),
+];
 /// Events an older version wrote an entry for and this one no longer does.
 const RETIRED: [&str; 1] = ["PreCompact"];
 /// Seconds before Claude Code gives up on the hook. Without it the harness waits 600 s.

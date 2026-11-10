@@ -63,8 +63,9 @@ pub enum Cmd {
         #[arg(long)]
         full: bool,
     },
-    /// Search the store. Run by an agent (`CLAUDECODE` or `CYBERBRAIN_AGENT` set), rings 2
-    /// to 4: rings 0 and 1 are in its session already. `--ring 0|1` searches them.
+    /// Search the store. Run by an agent (`CLAUDECODE` or `CYBERBRAIN_AGENT` set) in a
+    /// project whose hooks inject rings 0 and 1 (`cbl install`), rings 2 to 4: the others are
+    /// in its session already. `--ring 0|1` searches them.
     Recall {
         /// The query. Omit when using --id.
         query: Option<String>,
@@ -133,12 +134,15 @@ impl From<Kind> for cyberbrain_core::types::NoteKind {
     }
 }
 
-/// The two events where a memory earns its keep: the start of a session, and the moment the
-/// context is about to be thrown away. The full product hooks more; Light hooks the two that
-/// change what the agent knows.
+/// The events where a memory earns its keep: the start of a session and of a subagent, which
+/// both get rings 0 and 1, and the moment the context is about to be thrown away. The full
+/// product hooks more; Light hooks the ones that change what the agent knows.
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
 pub enum HookEvent {
     SessionStart,
+    /// Since 0.2.2. A subagent does not see its parent's session-start context, so without
+    /// this one it worked without the operator's rules (6, 2026-11-10).
+    SubagentStart,
     PreCompact,
 }
 
@@ -146,6 +150,7 @@ impl HookEvent {
     pub fn as_str(self) -> &'static str {
         match self {
             HookEvent::SessionStart => "session-start",
+            HookEvent::SubagentStart => "subagent-start",
             HookEvent::PreCompact => "pre-compact",
         }
     }

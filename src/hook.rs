@@ -14,6 +14,7 @@ use std::path::Path;
 fn harness_name(event: HookEvent) -> &'static str {
     match event {
         HookEvent::SessionStart => "SessionStart",
+        HookEvent::SubagentStart => "SubagentStart",
         HookEvent::PreCompact => "PreCompact",
     }
 }
@@ -76,7 +77,7 @@ pub fn run(event: HookEvent, store_root: &Path, stdin: &str) -> Result<HookOutpu
     };
 
     match event {
-        HookEvent::SessionStart => {
+        HookEvent::SessionStart | HookEvent::SubagentStart => {
             let (context, mut more) = resident_context(&app, source.as_deref())?;
             notes.append(&mut more);
             if context.is_empty() {
@@ -145,7 +146,9 @@ const CONTEXT_CHAR_CAP: usize = 9_400;
 /// Before (L5, 2026-10-31) it named all of them, uncounted, and eight long names took the
 /// context past 10,000 characters.
 const TRAILER_NAMES_CHARS: usize = 400;
-const TRAILER_HEAD: &str = "Not shown, because Claude Code shows at most 10,000 characters here: ";
+/// Names both reasons a resident note is left out: the character limit, and the token cap
+/// (6, 2026-11-10; before, the cap's omissions went to stderr only).
+const TRAILER_HEAD: &str = "Not shown (over the token cap or the 10,000 characters shown): ";
 const TRAILER_TAIL: &str =
     ". Open them under notes/r0 and notes/r1 before acting on anything they might cover.\n";
 /// " and 99999 more" is the longest the count can be.
@@ -194,7 +197,7 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
     let mut out = String::new();
     let mut tokens = 0usize;
     let cap = app.store.resident_cap();
-    let mut capped = false;
+    let mut over_cap: Vec<String> = Vec::new();
     let mut count = 0usize;
     let mut chars = 0usize;
     let mut too_long: Vec<String> = Vec::new();
@@ -223,7 +226,7 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
             };
             let cost = approx_tokens(&note.body) as usize;
             if tokens + cost > cap {
-                capped = true;
+                over_cap.push(format!("r{}/{}", ring.as_u8(), note.front.name));
                 continue;
             }
 
@@ -258,19 +261,23 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
         }
     }
 
-    if !too_long.is_empty() {
+    if !too_long.is_empty() || !over_cap.is_empty() {
         // Said to the model, not only on stderr: an invariant it cannot see must at least
-        // be one it knows it is missing.
-        out.push_str(&trailer(&too_long));
+        // be one it knows it is missing. Also when nothing else fitted.
+        let left_out: Vec<String> = over_cap.iter().chain(&too_long).cloned().collect();
+        out.push_str(&trailer(&left_out));
+    }
+    if !too_long.is_empty() {
         notes.push(format!(
             "{} resident note(s) did not fit the 10,000 characters Claude Code shows: {}",
             too_long.len(),
             too_long.join(", ")
         ));
     }
-    if capped {
+    if !over_cap.is_empty() {
         notes.push(format!(
-            "the resident cap of {cap} tokens was reached; some notes in r0/r1 were not injected"
+            "the resident cap of {cap} tokens was reached; not injected: {}",
+            over_cap.join(", ")
         ));
     }
     if let Some(s) = source {

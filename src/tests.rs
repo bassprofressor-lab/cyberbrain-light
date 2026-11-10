@@ -514,10 +514,13 @@ fn the_resident_cap_holds_and_is_reported() {
     };
     cfg.write(&root).unwrap();
     let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
-    assert!(
-        out.stdout.is_empty(),
-        "nothing fitted, so nothing is injected"
-    );
+    // Nothing fitted, so no note is injected; but the model is told one is missing (6).
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(!ctx.contains("word word"), "{ctx}");
+    assert!(ctx.contains("r0/big"), "{ctx}");
     assert!(
         out.notes.iter().any(|n| n.contains("resident cap")),
         "{:?}",
@@ -643,9 +646,13 @@ fn install_keeps_what_it_did_not_write_and_undoes_only_its_own() {
     .unwrap();
 
     let r = install::run(dir.path(), false).unwrap();
-    assert_eq!(r.added.len(), 1);
+    assert_eq!(r.added, ["SessionStart", "SubagentStart"]);
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
     assert_eq!(v["permissions"]["allow"][0], "Bash(ls:*)");
+    assert_eq!(
+        v["hooks"]["SubagentStart"][0]["hooks"][0]["args"][1],
+        "subagent-start"
+    );
     assert_eq!(
         v["hooks"]["SessionStart"].as_array().unwrap().len(),
         2,
@@ -655,10 +662,10 @@ fn install_keeps_what_it_did_not_write_and_undoes_only_its_own() {
     // Running it twice changes nothing.
     let again = install::run(dir.path(), false).unwrap();
     assert!(again.added.is_empty());
-    assert_eq!(again.unchanged.len(), 1);
+    assert_eq!(again.unchanged.len(), 2);
 
     let undone = install::run(dir.path(), true).unwrap();
-    assert_eq!(undone.removed.len(), 1);
+    assert_eq!(undone.removed.len(), 2);
     let v: Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
     assert_eq!(
         v["hooks"]["SessionStart"].as_array().unwrap().len(),
@@ -744,7 +751,7 @@ fn install_writes_only_what_changed_and_never_overwrites_a_backup() {
     let r = install::run(dir.path(), false).unwrap();
     assert!(r.backup.is_some());
     let undone = install::run(dir.path(), true).unwrap();
-    assert_eq!(undone.removed.len(), 1);
+    assert_eq!(undone.removed.len(), 2);
     assert_eq!(
         std::fs::read_to_string(claude.join("settings.json.bak")).unwrap(),
         original,
@@ -1109,7 +1116,9 @@ fn mcp_refuses_a_ring_out_of_range_instead_of_wrapping_it() {
 /// an agent gets rings 2 to 4 and a caveat that says so, `ring` 0 or 1 still searches them.
 #[test]
 fn mcp_recall_searches_rings_2_to_4_unless_asked_for_a_resident_ring() {
-    let (_d, root) = store(8192);
+    let (d, root) = store(8192);
+    // Where the hooks put rings 0 and 1 into the session (6, 2026-11-10).
+    install::run(d.path(), false).unwrap();
     let mut app = App::open(&root).unwrap();
     write(
         &mut app,
@@ -1162,8 +1171,10 @@ fn an_agent_at_the_command_line_is_told_by_its_environment() {
     assert!(!agent_from_env(env(&[("CLAUDECODE", " ")])));
     assert!(!agent_from_env(env(&[])));
 
-    // A person at the terminal still gets ring 0; an agent gets ring 2 and the caveat.
-    let (_d, root) = store(8192);
+    // A person at the terminal still gets ring 0; an agent gets ring 2 and the caveat,
+    // where the hooks put rings 0 and 1 into its session (6, 2026-11-10).
+    let (d, root) = store(8192);
+    install::run(d.path(), false).unwrap();
     let mut app = App::open(&root).unwrap();
     write(&mut app, 0, "regel", "freitags kein deploy");
     write(&mut app, 2, "stand", "freitags kein deploy seit märz");
@@ -1503,4 +1514,81 @@ fn an_agent_finds_ring_2_behind_many_resident_matches() {
     let result = app.recall("quokka", 5, None).unwrap();
     let names: Vec<_> = result.hits.iter().map(|h| h.note_name.as_str()).collect();
     assert_eq!(names, ["the-answer"], "{:?}", result.caveats);
+}
+
+/// 6 (2026-11-10): the MCP `recall` left rings 0 and 1 out for every caller, on the grounds
+/// that the session-start hook had put them into the context. Without the hook (Claude
+/// Desktop, another client, a project that never ran `cbl install`) nothing had: the model saw
+/// the operator's rules nowhere. They are left out only where a hook injects them.
+#[test]
+fn without_a_session_start_hook_mcp_recall_searches_the_resident_rings() {
+    let (dir, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(
+        &mut app,
+        0,
+        "wolfpack-regel",
+        "wolfpack bleibt abgeschaltet.",
+    );
+    write(
+        &mut app,
+        2,
+        "wolfpack-stand",
+        "wolfpack wurde abgeschaltet.",
+    );
+    drop(app);
+    let mut s = mcp_server(&root);
+    let text = tool_text(&mut s, 1, "recall", r#"{"query":"wolfpack abgeschaltet"}"#);
+    assert!(
+        text.contains("wolfpack-regel"),
+        "no hook, so ring 0 is searched: {text}"
+    );
+
+    install::run(dir.path(), false).unwrap();
+    let text = tool_text(&mut s, 2, "recall", r#"{"query":"wolfpack abgeschaltet"}"#);
+    assert!(!text.contains("wolfpack-regel"), "hooked: {text}");
+    assert!(text.contains("wolfpack-stand"), "{text}");
+}
+
+/// 6, the other half: a resident note the token cap kept out of the session was reported on
+/// stderr only, where the human may look and the model never does.
+#[test]
+fn a_resident_note_over_the_token_cap_is_named_to_the_model() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "small-rule", "Never deploy on a Friday.");
+    write(&mut app, 1, "long-protocol", &"word ".repeat(400));
+    drop(app);
+    let cfg = LightConfig {
+        resident_cap_tokens: 100,
+        ..LightConfig::default()
+    };
+    cfg.write(&root).unwrap();
+    let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(ctx.contains("small-rule"), "{ctx}");
+    assert!(
+        ctx.contains("r1/long-protocol"),
+        "named to the model: {ctx}"
+    );
+}
+
+/// A subagent does not see the session-start context; `subagent-start` gives it rings 0 and 1
+/// under its own event name.
+#[test]
+fn subagent_start_injects_the_resident_rings_too() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "rule", "Never deploy on a Friday.");
+    drop(app);
+    let out = hook::run(HookEvent::SubagentStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    assert_eq!(v["hookSpecificOutput"]["hookEventName"], "SubagentStart");
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(ctx.contains("Never deploy on a Friday."), "{ctx}");
 }

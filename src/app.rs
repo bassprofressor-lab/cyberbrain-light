@@ -260,6 +260,45 @@ pub struct App {
     /// is a second copy of its own context. A person has no such context and gets them.
     /// `--ring 0|1` searches them either way. The full Cyberbrain decides it the same way.
     pub agent: bool,
+    /// Whether a hook puts rings 0 and 1 into every session and subagent of this project
+    /// (6, 2026-11-10). Only then does `agent` leave them out: without the hook the agent holds
+    /// them nowhere, and recall is the only way it meets the operator's rules.
+    pub resident_injected: bool,
+}
+
+/// Whether the project a store sits in has hooks that inject rings 0 and 1 at the start of a
+/// session and of a subagent: entries for both events in `.claude/settings.json` or
+/// `settings.local.json`, written by `cbl install` or by the full Cyberbrain. Anything less —
+/// no project around the store, an older install without SubagentStart, a hand-written entry
+/// this cannot recognise — counts as not injected, and recall then searches the resident
+/// rings too: a second copy is cheaper than an invariant the agent never saw.
+pub fn resident_injected(store_root: &Path) -> bool {
+    let Some(project) = store_root.parent() else {
+        return false;
+    };
+    let mut session = false;
+    let mut subagent = false;
+    for file in ["settings.json", "settings.local.json"] {
+        let Ok(text) = std::fs::read_to_string(project.join(".claude").join(file)) else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
+        let ours = |event: &str| {
+            v["hooks"][event].as_array().is_some_and(|list| {
+                list.iter().any(|e| {
+                    matches!(
+                        e.get("_managedBy").and_then(serde_json::Value::as_str),
+                        Some("cyberbrain-light" | "cyberbrain")
+                    )
+                })
+            })
+        };
+        session |= ours("SessionStart");
+        subagent |= ours("SubagentStart");
+    }
+    session && subagent
 }
 
 /// Who is at this command line, the way the full Cyberbrain tells it: Claude Code sets
@@ -284,6 +323,7 @@ impl App {
             index,
             cfg,
             agent: false,
+            resident_injected: resident_injected(root),
         })
     }
 
@@ -307,6 +347,7 @@ impl App {
                 index,
                 cfg,
                 agent: false,
+                resident_injected: resident_injected(root),
             },
             existed,
         ))
@@ -518,7 +559,7 @@ impl App {
     // ----- recall --------------------------------------------------------------------
 
     pub fn recall(&self, query: &str, n: usize, ring: Option<Ring>) -> Result<RecallResult> {
-        let skip_resident = self.agent && ring.is_none();
+        let skip_resident = self.agent && self.resident_injected && ring.is_none();
         let opts = RecallOptions {
             n,
             k_lex: self.cfg.k_lex,
@@ -537,6 +578,13 @@ impl App {
         } else {
             self.index.recall(query, None, &opts)?
         };
+        if self.agent && !self.resident_injected && ring.is_none() {
+            result.caveats.push(
+                "rings 0 and 1 were searched as well: no hook in this project puts them into \
+                 the session (`cbl install` adds one)"
+                    .into(),
+            );
+        }
         if skip_resident {
             result.caveats.push(
                 "rings 0 and 1 were not searched: they are in the session context already; \

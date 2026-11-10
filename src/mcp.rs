@@ -199,7 +199,8 @@ impl Server {
         };
         match name {
             "recall" => {
-                // Whoever calls a tool here is the model (L12).
+                // Whoever calls a tool here is the model (L12). Rings 0 and 1 are left out
+                // only where a hook injects them (6, 2026-11-10): `App::resident_injected`.
                 let mut app = App::open(root)?;
                 app.agent = true;
                 let n = args.get("n").and_then(Value::as_u64).unwrap_or(8) as usize;
@@ -276,9 +277,10 @@ fn tool_list() -> Value {
         {
             "name": "recall",
             "title": "Search the project memory",
-            "description": "Keyword search over rings 2 to 4. Returns hits with a citation, \
-                             a ring and a score, plus what was not checked. Use the words \
-                             that would appear in the note; there is no semantic search.",
+            "description": "Keyword search over rings 2 to 4, and over rings 0 and 1 too \
+                             where no hook puts them into the session. Returns hits with a \
+                             citation, a ring and a score, plus what was not checked. Use the \
+                             words that would appear in the note; there is no semantic search.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
