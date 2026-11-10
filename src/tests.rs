@@ -1134,7 +1134,7 @@ fn mcp_recall_searches_rings_2_to_4_unless_asked_for_a_resident_ring() {
     let text = r["result"]["content"][0]["text"].as_str().unwrap();
     assert!(text.contains("wolfpack-stand"), "{text}");
     assert!(!text.contains("wolfpack-regel"), "{text}");
-    assert!(text.contains("rings 0/1"), "and says why: {text}");
+    assert!(text.contains("rings 0 and 1"), "and says why: {text}");
 
     let r0 = rpc(
         &mut s,
@@ -1471,4 +1471,36 @@ fn install_keeps_the_file_mode_and_does_not_replace_a_link() {
             .is_symlink()
     );
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "{}");
+}
+
+// ----- recall for an agent (0.2.2) ---------------------------------------------------
+
+/// 5 (2026-11-10): for an agent, rings 0 and 1 were dropped after the lexical candidates had
+/// been cut to `k_lex` (50). Sixty resident blocks with the word took every place, and the
+/// ring 2 note that also had it came back as "no hits".
+#[test]
+fn an_agent_finds_ring_2_behind_many_resident_matches() {
+    let (dir, root) = store(8192);
+    // The session-start hook is installed, so rings 0 and 1 are in the agent's context.
+    install::run(dir.path(), false).unwrap();
+    let mut app = App::open(&root).unwrap();
+    for i in 0..60 {
+        write(
+            &mut app,
+            (i % 2) as u8,
+            &format!("rule-{i}"),
+            "quokka quokka",
+        );
+    }
+    write(
+        &mut app,
+        2,
+        "the-answer",
+        "A long note that mentions the quokka once among many other words about deployments, \
+         databases, schedules, backups, certificates, mirrors, caches and the weather.",
+    );
+    app.agent = true;
+    let result = app.recall("quokka", 5, None).unwrap();
+    let names: Vec<_> = result.hits.iter().map(|h| h.note_name.as_str()).collect();
+    assert_eq!(names, ["the-answer"], "{:?}", result.caveats);
 }

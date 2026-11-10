@@ -9,7 +9,7 @@ use cyberbrain_core::links::link_targets;
 use cyberbrain_core::store::Store;
 use cyberbrain_core::types::{Frontmatter, Note, NoteId, NoteKind, RecallResult, Ring};
 use cyberbrain_core::{Citation, frontmatter, provenance};
-use cyberbrain_index::{Index, IndexStats, RecallOptions, content_hash};
+use cyberbrain_index::{Index, IndexStats, NoteFacts, RecallOptions, Visibility, content_hash};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -518,16 +518,32 @@ impl App {
     // ----- recall --------------------------------------------------------------------
 
     pub fn recall(&self, query: &str, n: usize, ring: Option<Ring>) -> Result<RecallResult> {
+        let skip_resident = self.agent && ring.is_none();
         let opts = RecallOptions {
             n,
             k_lex: self.cfg.k_lex,
             // No embedder exists in this product, so no candidates are asked for.
             k_sem: 0,
             ring,
-            skip_resident: self.agent,
             ..RecallOptions::default()
         };
-        let mut result = self.index.recall(query, None, &opts)?;
+        // Rings 0 and 1 are left out before the candidates are cut to `k_lex`, not after
+        // (5, 2026-11-10). `skip_resident` drops them from the ranked list, so fifty resident
+        // blocks with the word took every candidate and a ring 2 note that had it too came
+        // back as no hits. A visibility filter is applied inside the lexical query.
+        let mut result = if skip_resident {
+            self.index
+                .recall_visible(query, None, &opts, &NotResident)?
+        } else {
+            self.index.recall(query, None, &opts)?
+        };
+        if skip_resident {
+            result.caveats.push(
+                "rings 0 and 1 were not searched: they are in the session context already; \
+                 ask with --ring 0 or --ring 1 (MCP: `ring`) to search them"
+                    .into(),
+            );
+        }
         // The index says "no embedder configured", which is true of the store and wrong
         // about the tool: nothing here is misconfigured. Say what is actually the case.
         result.caveats.retain(|c| !c.starts_with("semantic search"));
@@ -699,6 +715,15 @@ impl App {
         std::fs::metadata(self.store.db_path())
             .map(|m| m.len())
             .unwrap_or(0)
+    }
+}
+
+/// Every note but rings 0 and 1, for a recall on behalf of a reader who holds them already.
+struct NotResident;
+
+impl Visibility for NotResident {
+    fn admits(&self, note: &NoteFacts<'_>) -> bool {
+        !note.ring.is_resident()
     }
 }
 
