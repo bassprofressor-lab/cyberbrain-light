@@ -1592,3 +1592,42 @@ fn subagent_start_injects_the_resident_rings_too() {
         .unwrap();
     assert!(ctx.contains("Never deploy on a Friday."), "{ctx}");
 }
+
+// ----- scan and a name used twice (0.2.2) --------------------------------------------
+
+/// 7 (2026-11-10): two files with the same name and different ids in two rings (a copy made
+/// by hand, a merge) made `scan --full` stop at the second one, after it had already emptied
+/// the index: every note after it was gone from search until the files were fixed. `doctor
+/// --fix` stopped the same way. The second one is now skipped and named, like an unreadable
+/// note, and the rest is indexed.
+#[test]
+fn a_name_used_twice_is_skipped_and_the_scan_finishes() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "dup", "first copy of the zebra note");
+    for i in 0..5 {
+        write(&mut app, 4, &format!("later-{i}"), "zebra crossing");
+    }
+    let mut copy = app.store.read("dup").unwrap();
+    copy.front.id = cyberbrain_core::types::NoteId::generate();
+    copy.front.ring = Ring::try_from(3).unwrap();
+    // By hand: the store's own write refuses a second file of the same name.
+    let text = cyberbrain_core::frontmatter::render(&copy.front, &copy.body).unwrap();
+    std::fs::write(root.join("notes/r3/dup.md"), text).unwrap();
+
+    let report = app.scan(true).expect("the scan finishes");
+    assert!(
+        report.skipped.iter().any(|s| s.contains("dup")),
+        "{:?}",
+        report.skipped
+    );
+    assert_eq!(
+        app.index.stats().unwrap().notes,
+        6,
+        "all the others are indexed"
+    );
+    assert_eq!(app.recall("zebra", 10, None).unwrap().hits.len(), 6);
+
+    let d = app.doctor(true).expect("doctor --fix finishes too");
+    assert!(d.repaired.is_some() || !d.findings.is_empty());
+}

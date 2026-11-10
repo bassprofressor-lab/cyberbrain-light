@@ -477,6 +477,7 @@ impl App {
         };
 
         let mut seen: HashSet<NoteId> = HashSet::new();
+        let mut names: std::collections::HashMap<String, PathBuf> = Default::default();
         for entry in &listing.entries {
             let mut note = match self.store.read_path(&entry.path) {
                 Ok(n) => n,
@@ -496,6 +497,22 @@ impl App {
                 ));
                 continue;
             }
+            // A name is unique too (7, 2026-11-10). Two files of one name in two rings made
+            // the index refuse the second, and the `?` below stopped the whole scan — after
+            // `--full` had emptied the index. The first in listing order (the lower ring)
+            // keeps the name; the other is skipped and named, like an unreadable note.
+            if let Some(first) = names.get(&note.front.name) {
+                seen.remove(&note.front.id);
+                report.skipped.push(format!(
+                    "{}: the name `{}` is already used by {}; names are unique, rename or \
+                     remove one of them",
+                    entry.path.display(),
+                    note.front.name,
+                    first.display()
+                ));
+                continue;
+            }
+            names.insert(note.front.name.clone(), entry.path.clone());
 
             // Links are derived from the body, never hand-maintained, so scan writes them back.
             let targets = link_targets(&note.body);
@@ -516,7 +533,19 @@ impl App {
             }
             let (blocks, oversized) = blocks_of(&note, MAX_BLOCK_TOKENS);
             report.oversized += oversized.len();
-            let outcome = self.index.upsert_note(&note, &blocks, None)?;
+            // The index can still hold the name under another id, from a file listed after
+            // this one or gone since: skipped and named as well, and the scan goes on.
+            let outcome = match self.index.upsert_note(&note, &blocks, None) {
+                Ok(o) => o,
+                Err(cyberbrain_core::Error::Index(msg)) if msg.contains("is already used by") => {
+                    report.skipped.push(format!(
+                        "{}: {msg}; names are unique, rename or remove one of them",
+                        entry.path.display()
+                    ));
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
             if outcome.replaced {
                 report.updated += 1;
             } else {
