@@ -1431,3 +1431,44 @@ fn text_output_marks_outside_material_and_outdated_notes() {
     let e = crate::render::expanded_text(&app.expand(cit).unwrap());
     assert!(e.contains("superseded by deploy-new"), "{e}");
 }
+
+// ----- install and the file's owner (0.2.2) ------------------------------------------
+
+/// 4 (2026-11-10): a settings.json kept at 0600 (it may hold tokens in `env`) came back 0644
+/// after `cbl install`, and its backup too; and a settings.json that is a link was replaced by
+/// a plain file, cutting it off from what it pointed at.
+#[cfg(unix)]
+#[test]
+fn install_keeps_the_file_mode_and_does_not_replace_a_link() {
+    use std::os::unix::fs::PermissionsExt;
+    let project = tempfile::tempdir().unwrap();
+    let dir = project.path().join(".claude");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("settings.json");
+    std::fs::write(&path, r#"{"env":{"TOKEN":"x"}}"#).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+    let r = install::run(project.path(), false).unwrap();
+    let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&path), 0o600, "settings.json keeps its mode");
+    assert_eq!(
+        mode(r.backup.as_deref().unwrap()),
+        0o600,
+        "and so does the backup"
+    );
+
+    let elsewhere = tempfile::tempdir().unwrap();
+    let target = elsewhere.path().join("shared-settings.json");
+    std::fs::write(&target, "{}").unwrap();
+    std::fs::remove_file(&path).unwrap();
+    std::os::unix::fs::symlink(&target, &path).unwrap();
+    let err = install::run(project.path(), false).expect_err("a link is not replaced");
+    assert!(format!("{err:#}").contains("link"), "{err:#}");
+    assert!(
+        std::fs::symlink_metadata(&path)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "{}");
+}

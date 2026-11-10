@@ -36,6 +36,25 @@ pub fn run(project: &Path, undo: bool) -> Result<InstallReport> {
     let path = dir.join("settings.json");
     let binary = current_binary();
 
+    // A link is not replaced (4, 2026-11-10). Writing through a temporary file and a rename
+    // put a plain file where the link was and cut it off from what it pointed at; writing
+    // through the link instead would change a file outside this project — another project's
+    // settings, a dotfiles checkout, the user's global ones — which a project-level install
+    // has no business doing, and which a link committed to a repository could aim anywhere.
+    // So it stops and says what to do.
+    if let Ok(meta) = std::fs::symlink_metadata(&path)
+        && meta.file_type().is_symlink()
+    {
+        let target = std::fs::read_link(&path)
+            .map(|t| t.display().to_string())
+            .unwrap_or_else(|_| "?".into());
+        bail!(
+            "{} is a symbolic link (to {target}); cbl install does not write through links. \
+             Run it in the project the link points into, or add the entry by hand",
+            path.display()
+        );
+    }
+
     let mut root: Map<String, Value> = match std::fs::read_to_string(&path) {
         Ok(text) if !text.trim().is_empty() => serde_json::from_str(&text).with_context(|| {
             format!(
@@ -142,14 +161,20 @@ pub fn run(project: &Path, undo: bool) -> Result<InstallReport> {
     }
 
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    // The mode the file had, kept for the new file and its backup (4, 2026-11-10): a
+    // settings.json at 0600 may hold tokens under `env`, and came back 0644.
+    let perms = std::fs::metadata(&path).ok().map(|m| m.permissions());
     if path.exists() {
-        report.backup = Some(backup(&path)?);
+        report.backup = Some(backup(&path, perms.as_ref())?);
     }
     let text = serde_json::to_string_pretty(&Value::Object(root))? + "\n";
     // Through a temporary file and a rename: a crash halfway leaves the old file, not half of
-    // the new one.
-    cyberbrain_core::store::write_atomic(&path, text.as_bytes())
-        .with_context(|| format!("writing {}", path.display()))?;
+    // the new one. The temporary file gets the mode before it gets the content.
+    cyberbrain_core::store::write_atomic_with(&path, |f| {
+        keep_mode(f, perms.as_ref())?;
+        std::io::Write::write_all(f, text.as_bytes())
+    })
+    .with_context(|| format!("writing {}", path.display()))?;
     Ok(report)
 }
 
@@ -157,7 +182,7 @@ pub fn run(project: &Path, undo: bool) -> Result<InstallReport> {
 /// install and an undo used to leave only the state before the undo, and the original was
 /// gone. The first copy is `settings.json.bak`, later ones `settings.json.bak.1`, `.2` …; a
 /// copy with the same bytes is reused instead of made again.
-fn backup(path: &Path) -> Result<PathBuf> {
+fn backup(path: &Path, perms: Option<&std::fs::Permissions>) -> Result<PathBuf> {
     let current =
         std::fs::read(path).with_context(|| format!("reading {} to back it up", path.display()))?;
     let base = path.with_extension("json.bak");
@@ -173,14 +198,32 @@ fn backup(path: &Path) -> Result<PathBuf> {
             Ok(bytes) if bytes == current => return Ok(candidate),
             Ok(_) => continue,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                std::fs::write(&candidate, &current)
-                    .with_context(|| format!("backing up {} first", path.display()))?;
+                let written = std::fs::File::create_new(&candidate).and_then(|mut f| {
+                    keep_mode(&f, perms)?;
+                    std::io::Write::write_all(&mut f, &current)
+                });
+                written.with_context(|| format!("backing up {} first", path.display()))?;
                 return Ok(candidate);
             }
             Err(e) => return Err(e).with_context(|| format!("reading {}", candidate.display())),
         }
     }
     unreachable!("u32 backups")
+}
+
+/// Give a file just created the mode of the one it replaces or copies. Unix only: elsewhere
+/// the only permission is read-only, and a read-only copy could not be written.
+#[cfg(unix)]
+fn keep_mode(f: &std::fs::File, perms: Option<&std::fs::Permissions>) -> std::io::Result<()> {
+    match perms {
+        Some(p) => f.set_permissions(p.clone()),
+        None => Ok(()),
+    }
+}
+
+#[cfg(not(unix))]
+fn keep_mode(_: &std::fs::File, _: Option<&std::fs::Permissions>) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// The absolute path of the running binary, so the hook keeps working when the agent's
