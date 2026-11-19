@@ -12,6 +12,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+## [0.2.3] - unreleased
+
+- **Light opens a store Cyberbrain 0.10.6 or later has touched, again.** Cyberbrain 0.10.6
+  (16.11.) brought the index to schema 7, and Light 0.2.2 refused every such store with
+  advice to upgrade to a version that did not exist. Light now builds on Cyberbrain 0.10.7
+  (`cyberbrain-core`, `cyberbrain-index`) and reads schema 7. An older index is brought to
+  schema 7 on open, notes and all; after that, Light 0.2.2 and Cyberbrain before 0.10.6 no
+  longer open it.
+- **Notes with `anchors:` in the head are notes.** Cyberbrain 0.10.6 records the files a note
+  is about (`write --anchor`, or a `path:line` in the body). Light 0.2.2 called such a note
+  malformed: missing from search, `cbl write` on its name failed, and as an operator rule it
+  did not ride along. Light reads them now, and an edit with `cbl write` keeps the anchors as
+  Cyberbrain wrote them.
+- **An unreadable rule is named to the model.** A note in ring 0 or 1 whose head cannot be
+  read went to stderr only, so the session started without that rule and the model did not
+  know. It is now named in the closing line of the session-start context, beside the notes
+  over the token or character limit.
+- **`cargo install cyberbrain-light` builds again.** The dependency allowed any core 0.10, and
+  core 0.10.7 added a required field to a public type; without `--locked`, the install failed
+  with `E0063 missing field anchors`. The core crates are now pinned to exactly 0.10.7, so a
+  later core comes in only with a Light release made for it. The README says `cargo install
+  --locked cyberbrain-light`, and so does the error for an index newer than Light, which no
+  longer suggests that the upgrade already exists.
+
 ## [0.2.2] - 2026-11-10
 
 - **Light opens a store Cyberbrain 0.10 has touched.** Built on Cyberbrain 0.10.1

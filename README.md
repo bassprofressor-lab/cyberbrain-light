@@ -36,7 +36,7 @@ every result, so nobody builds on a search that did not happen.
 ## Install
 
 ```console
-$ cargo install cyberbrain-light
+$ cargo install --locked cyberbrain-light
 $ cbl init
 $ cbl install          # writes the session- and subagent-start hooks into .claude/settings.json
 ```
@@ -142,8 +142,8 @@ could.
 
 **The store is the same.** Same directory, same Markdown, same rings, same citations. Start
 with Light and install Cyberbrain later, and one `cyberbrain scan` picks up every note you
-already wrote. Light 0.2.2 reads the index of Cyberbrain 0.10 (schema 6) and brings an older
-one up to it; after that, Light 0.2.1 and Cyberbrain before 0.10 no longer open it. Light writes its three settings to `light.toml` and never touches the full
+already wrote. Light 0.2.3 reads the index of Cyberbrain 0.10.6 and later (schema 7), notes with `anchors:` included, and brings an older
+one up to it; after that, Light 0.2.2 and Cyberbrain before 0.10.6 no longer open it. Light writes its three settings to `light.toml` and never touches the full
 product's `cyberbrain.toml`, so a store used by both keeps two independent configurations.
 
 **Light does not keep the full product's promises, and on a shared store it walks past
