@@ -20,8 +20,12 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.6", features = ["derive", "env"] }
-cyberbrain-core = "0.10.1"
-cyberbrain-index = "0.10.1"
+# Pinned exactly (L2, 2026-11-19). `^0.10.1` let `cargo install` without `--locked` pull
+# core 0.10.7, which added a required field to the public `Frontmatter` in a patch release,
+# and the build broke for everyone. A new core comes in by raising this pin together with
+# the code and the index schema Light reads, never by itself.
+cyberbrain-core = "=0.10.7"
+cyberbrain-index = "=0.10.7"
 jiff = { version = "0.2.35", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 # `preserve_order`: `cbl install` rewrites a settings.json that belongs to the user, and

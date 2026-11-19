@@ -148,7 +148,10 @@ const CONTEXT_CHAR_CAP: usize = 9_400;
 const TRAILER_NAMES_CHARS: usize = 400;
 /// Names both reasons a resident note is left out: the character limit, and the token cap
 /// (6, 2026-11-10; before, the cap's omissions went to stderr only).
-const TRAILER_HEAD: &str = "Not shown (over the token cap or the 10,000 characters shown): ";
+/// And unreadable ones (L6, 2026-11-19): a head that does not parse was reported on stderr
+/// only, so an operator rule could be missing without the model knowing.
+const TRAILER_HEAD: &str =
+    "Not shown (unreadable, over the token cap or over the 10,000 characters shown): ";
 const TRAILER_TAIL: &str =
     ". Open them under notes/r0 and notes/r1 before acting on anything they might cover.\n";
 /// " and 99999 more" is the longest the count can be.
@@ -224,6 +227,7 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
     let mut count = 0usize;
     let mut chars = 0usize;
     let mut too_long: Vec<String> = Vec::new();
+    let mut unreadable: Vec<String> = Vec::new();
 
     // Through the store's listing, which honours `.cyberbrainignore` (L4, 2026-10-31): a
     // resident note the operator hid is the one that must not ride along any more.
@@ -244,6 +248,8 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
                         "{}: unreadable, not injected ({e})",
                         path.display()
                     ));
+                    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+                    unreadable.push(format!("r{}/{stem} (unreadable)", ring.as_u8()));
                     continue;
                 }
             };
@@ -275,10 +281,15 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
         }
     }
 
-    if !too_long.is_empty() || !over_cap.is_empty() {
+    if !too_long.is_empty() || !over_cap.is_empty() || !unreadable.is_empty() {
         // Said to the model, not only on stderr: an invariant it cannot see must at least
         // be one it knows it is missing. Also when nothing else fitted.
-        let left_out: Vec<String> = over_cap.iter().chain(&too_long).cloned().collect();
+        let left_out: Vec<String> = unreadable
+            .iter()
+            .chain(&over_cap)
+            .chain(&too_long)
+            .cloned()
+            .collect();
         out.push_str(&trailer(&left_out));
     }
     if !too_long.is_empty() {

@@ -1277,46 +1277,56 @@ fn schema_of(root: &Path) -> u32 {
     .unwrap()
 }
 
+/// Takes a Light index (schema 7 since 0.2.3) back to what Cyberbrain 0.10.1 to 0.10.5 and
+/// Light 0.2.2 leave behind: schema 6, without the anchor tables.
+fn back_to_schema_6(root: &Path) {
+    assert_eq!(schema_of(root), 7);
+    sql(
+        root,
+        "DROP TABLE anchors;
+         DROP TABLE anchor_files;
+         UPDATE meta SET value = '6' WHERE key = 'schema_version';",
+    );
+}
+
 /// 1 (2026-11-10): Cyberbrain 0.10 writes index schema 6; Light 0.2.1 understood 5, refused
 /// every store the full product had touched, and the session-start hook said nothing to the
-/// model about it. Here the index is brought to what 0.10.1 leaves behind.
+/// model about it. Since 0.2.3 a schema 6 index is migrated to 7 on open, as Cyberbrain
+/// 0.10.6 does (after that, 0.10.5 and Light 0.2.2 refuse it; the CHANGELOG says so).
 #[test]
 fn a_store_cyberbrain_0_10_wrote_opens() {
     let (_d, root) = store(8192);
     let mut app = App::open(&root).unwrap();
     write(&mut app, 2, "pg18", "The postgres data directory moved.");
     drop(app);
-    if schema_of(&root) < 6 {
-        sql(
-            &root,
-            "ALTER TABLE blocks ADD COLUMN locator TEXT;
-             UPDATE meta SET value = '6' WHERE key = 'schema_version';",
-        );
-    }
+    back_to_schema_6(&root);
     let app = App::open(&root).expect("a schema 6 index opens");
-    assert_eq!(app.index.stats().unwrap().schema_version, 6);
+    assert_eq!(
+        app.index.stats().unwrap().schema_version,
+        7,
+        "migrated on open"
+    );
     let hits = app.recall("postgres", 5, None).unwrap().hits;
     assert_eq!(hits.len(), 1);
 }
 
-/// And the other way: an index an older Light or Cyberbrain left at schema 5 is migrated on
-/// open, notes and all. (After that an older build refuses it; the CHANGELOG says so.)
+/// And further back: an index an older Light or Cyberbrain left at schema 5 is migrated on
+/// open, notes and all.
 #[test]
 fn a_schema_5_index_is_migrated_and_keeps_its_notes() {
     let (_d, root) = store(8192);
     let mut app = App::open(&root).unwrap();
     write(&mut app, 2, "pg18", "The postgres data directory moved.");
     drop(app);
-    if schema_of(&root) == 6 {
-        sql(
-            &root,
-            "ALTER TABLE blocks DROP COLUMN locator;
-             UPDATE meta SET value = '5' WHERE key = 'schema_version';",
-        );
-    }
+    back_to_schema_6(&root);
+    sql(
+        &root,
+        "ALTER TABLE blocks DROP COLUMN locator;
+         UPDATE meta SET value = '5' WHERE key = 'schema_version';",
+    );
     assert_eq!(schema_of(&root), 5);
     let app = App::open(&root).unwrap();
-    assert_eq!(schema_of(&root), 6, "migrated on open");
+    assert_eq!(schema_of(&root), 7, "migrated on open");
     assert_eq!(app.recall("postgres", 5, None).unwrap().hits.len(), 1);
 }
 
@@ -1766,4 +1776,147 @@ fn mcp_survives_a_line_that_is_not_utf8() {
     assert_eq!(lines[0]["error"]["code"], -32700);
     assert_eq!(lines[1]["id"], 2);
     assert!(lines[1]["result"].is_object());
+}
+
+// ----- a store the full Cyberbrain 0.10.7 wrote (0.2.3) ------------------------------
+
+/// `tests/fixtures/kern-0.10.7-store` is not hand-made: the real `cyberbrain` 0.10.7 binary
+/// ran `init`, `write` (with a `path:line` in the body, which it anchors by itself), `anchor`
+/// and `scan` on a throwaway project, and its `notes/`, `cyberbrain.db` (WAL checkpointed)
+/// and `cyberbrain.toml` were copied here. Index schema 7, `anchors:` in two note heads.
+/// Git keeps no empty directories, so the ring directories are made again on the copy.
+fn store_from_cyberbrain_0_10_7() -> (TempDir, PathBuf) {
+    fn copy(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for entry in std::fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let target = to.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy(&entry.path(), &target);
+            } else {
+                std::fs::copy(entry.path(), &target).unwrap();
+            }
+        }
+    }
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/kern-0.10.7-store");
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path().join(".cyberbrain");
+    copy(&fixture, &root);
+    for r in 0..5 {
+        std::fs::create_dir_all(root.join(format!("notes/r{r}"))).unwrap();
+    }
+    (dir, root)
+}
+
+const ANCHORS_HEAD: &str = "anchors:\n- path: src/main.rs\n  lines: '2'\n  sha256: \
+    1b1926a1e9bc7107e48a56a7f99f5463566cf86dbc2b7a5f41a13eec6e83d6e2\n  at: \
+    2026-11-19T20:30:29.454381442Z\n";
+
+/// L1 (2026-11-19): Cyberbrain 0.10.6 brought the index to schema 7, and Light 0.2.2 refused
+/// every store it had touched, recommending an upgrade that did not exist.
+/// L6: notes with `anchors:` in the head were "malformed", missing from search and unwritable.
+#[test]
+fn a_store_cyberbrain_0_10_7_wrote_opens_and_its_anchored_notes_are_found() {
+    let (_d, root) = store_from_cyberbrain_0_10_7();
+    assert_eq!(
+        schema_of(&root),
+        7,
+        "the fixture is what 0.10.7 leaves behind"
+    );
+
+    let mut app = App::open(&root).expect("a schema 7 index opens");
+    let hits = app.recall("hallo", 5, None).unwrap().hits;
+    let mut names: Vec<String> = hits.iter().map(|h| h.note_name.clone()).collect();
+    names.sort();
+    assert_eq!(names, ["hallo-ausgabe", "start-protokoll"], "{hits:?}");
+
+    let report = app.scan(true).expect("a full scan reads every note");
+    assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+    assert_eq!(report.stats.unwrap().notes, 3);
+    assert_eq!(schema_of(&root), 7, "and the index stays at 7");
+    assert_eq!(app.recall("zebrafisch", 5, None).unwrap().hits.len(), 1);
+}
+
+/// An edit with `cbl write` keeps the anchors the full product recorded: what Light does not
+/// edit, it keeps (as for `retention` and the rest since 0.2.0).
+#[test]
+fn a_light_edit_keeps_the_anchors_cyberbrain_wrote() {
+    let (_d, root) = store_from_cyberbrain_0_10_7();
+    let mut app = App::open(&root).unwrap();
+    app.write_note(WriteRequest {
+        ring: Ring::try_from(2).unwrap(),
+        kind: NoteKind::Knowledge,
+        name: "hallo-ausgabe".into(),
+        body: "Die Ausgabe hallo kommt jetzt zweimal.".into(),
+        tags: vec![],
+    })
+    .expect("a note with anchors can be edited");
+    let text = std::fs::read_to_string(root.join("notes/r2/hallo-ausgabe.md")).unwrap();
+    assert!(text.contains("zweimal"), "{text}");
+    assert!(text.contains(ANCHORS_HEAD), "anchors dropped:\n{text}");
+    drop(app);
+    let app = App::open(&root).unwrap();
+    assert_eq!(app.recall("zweimal", 5, None).unwrap().hits.len(), 1);
+}
+
+/// An operator rule the full product anchored still rides along at session start.
+#[test]
+fn an_anchored_resident_note_is_injected() {
+    let (_d, root) = store_from_cyberbrain_0_10_7();
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "regel-freitag", "Niemals freitags ausrollen.");
+    drop(app);
+    let path = root.join("notes/r0/regel-freitag.md");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let close = text[3..].find("\n---\n").unwrap() + 4;
+    std::fs::write(
+        &path,
+        format!("{}{ANCHORS_HEAD}{}", &text[..close], &text[close..]),
+    )
+    .unwrap();
+
+    let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(
+        ctx.contains("Niemals freitags ausrollen."),
+        "{ctx}\n{:?}",
+        out.notes
+    );
+}
+
+/// L6, hook part: a resident note whose head cannot be read went to stderr only; the model
+/// was not told that an operator rule was missing. It is named in the same closing line as
+/// the notes over the caps.
+#[test]
+fn an_unreadable_resident_note_is_named_to_the_model() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "lesbar", "Diese Regel ist lesbar.");
+    write(
+        &mut app,
+        1,
+        "kaputt",
+        "Diese Regel hat einen kaputten Kopf.",
+    );
+    drop(app);
+    let path = root.join("notes/r1/kaputt.md");
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        text.replacen("ring: 1\n", "ring: 1\nfeld-das-es-nicht-gibt: 1\n", 1),
+    )
+    .unwrap();
+
+    let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(ctx.contains("Diese Regel ist lesbar."), "{ctx}");
+    assert!(!ctx.contains("kaputten Kopf"), "{ctx}");
+    assert!(ctx.contains("r1/kaputt"), "the model is not told:\n{ctx}");
+    assert!(ctx.contains("unreadable"), "{ctx}");
 }

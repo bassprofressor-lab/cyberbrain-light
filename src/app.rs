@@ -235,9 +235,10 @@ fn open_index(path: &Path) -> Result<Index> {
             let found = msg.split_whitespace().nth(4).unwrap_or("?");
             bail!(
                 "the index at {} has schema version {found}, newer than the version {} that \
-                 cbl {} reads: a newer Cyberbrain wrote it. Upgrade cbl \
-                 (`cargo install cyberbrain-light`); the notes and the index are fine as they \
-                 are and should stay where they are",
+                 cbl {} reads: a newer Cyberbrain wrote it. Upgrade cbl once a release reads \
+                 it, which may not exist yet (`cargo install --locked cyberbrain-light`); \
+                 meanwhile use that Cyberbrain on this store. The notes and the index \
+                 are fine as they are and should stay where they are",
                 path.display(),
                 cyberbrain_index::SCHEMA_VERSION,
                 env!("CARGO_PKG_VERSION"),
@@ -436,6 +437,13 @@ impl App {
             valid_from: existing.as_ref().and_then(|n| n.front.valid_from),
             invalid_at: existing.as_ref().and_then(|n| n.front.invalid_at),
             pii: Default::default(),
+            // Recorded by the full Cyberbrain (0.10.6 on, `write --anchor`): the files the
+            // note makes claims about and their hashes then. Light does not anchor, so it
+            // keeps them as they are (L6, 2026-11-19).
+            anchors: existing
+                .as_ref()
+                .map(|n| n.front.anchors.clone())
+                .unwrap_or_default(),
         };
         let note = Note {
             front,

@@ -1,0 +1,96 @@
+# Cyberbrain configuration. Every key below is optional; a missing key takes the
+# default shown here. Unknown keys are an error, so a typo cannot silently revert a
+# setting to its default.
+
+[rings]
+# Rings 0 and 1 are injected into every session, so together they carry a hard cap,
+# in approximate tokens. Exceeding it fails the write; nothing is truncated at read time.
+resident_cap_tokens = 8192
+
+[handoff]
+# Session start also shows the newest note in ring 2 or 3 whose name contains one of these
+# (ignoring case), so a session finds what the previous one left for it without having to
+# know to ask. It is shown as what it is: ring 2 or 3, dated, outranked by rings 0 and 1.
+# An empty list turns this off.
+name_contains = ["handoff"]
+# Older than this, a handoff is not shown at all.
+max_age_days = 7
+# Longer than this (approximate tokens), the remaining blocks are listed by citation only.
+# The first block is always shown. Every token here is paid on every request of the session,
+# so the default shows the opening block and points at the rest.
+max_tokens = 200
+
+[retrieval]
+# Hybrid search: lexical (BM25) and semantic candidates, fused by reciprocal rank
+# fusion, weighted by ring, top n returned.
+k_lex = 50
+k_sem = 50
+n = 8
+rrf_k = 60
+# Multiplier per ring 0..4 after fusion. Lower rings are more trusted.
+ring_weights = [1.15, 1.10, 1.00, 0.92, 0.80]
+
+[embedding]
+# Directory of the model artefact, relative to the store unless absolute.
+model_path = "models/model2vec"
+# Profile id the stored vectors must match; a mismatch disables semantic search loudly.
+profile = "static-model2vec"
+# Where the artefact may be fetched from if it is missing. The egress gate permits a model
+# download towards this exact host and nowhere else. Left unset, nothing may be downloaded
+# and the artefact has to be placed by hand.
+# model_source = "https://example.org/potion-base-8M"
+# Your agreement to that one download. It is stored rather than asked each run, because
+# consent that is forgotten on restart just gets clicked away.
+model_download_consent = false
+
+[inference]
+# OpenAI-compatible endpoint for the optional local LLM layer (Ollama, LM Studio,
+# NVIDIA PAIR, vLLM, llama.cpp ...). Must be loopback or a private range unless
+# allow_public_endpoint is set. Every call is recorded in the audit log.
+base_url = "http://127.0.0.1:11434/v1"
+allow_public_endpoint = false
+
+# Permits 100.64.0.0/10. That is carrier-grade NAT, where an address usually belongs to
+# somebody else, but it is also the range Tailscale and similar overlays hand out for your
+# own machines. Turn this on only if you know the endpoint is yours.
+allow_overlay_network = false
+# model = "qwen3:8b"
+timeout_ms = 30000
+# How long a recall waits for the contradiction check. The hits are ready in milliseconds;
+# this is the wait a person notices. Over budget, the hits come back with a caveat saying
+# the check did not run. 0 waits as long as timeout_ms.
+contradiction_budget_ms = 3000
+# cgroup v2 directory of the process serving base_url, when it runs on this machine and you
+# want the load page to attribute its CPU and memory exactly rather than machine-wide. The
+# page asks for this by name, and until now the only place the name appeared was a doc
+# comment in the source. Configured and not detected on purpose: the automatic route runs
+# through a container runtime's proxy process, and an attribution that is wrong but looks
+# exact is worse than none.
+# load_cgroup = "/sys/fs/cgroup/system.slice/docker-<id>.scope"
+
+[transcription]
+# Speech to text with a local whisper.cpp server (`whisper-server --convert`), for
+# `cyberbrain transcribe` and the dictation button in the web UI. Off until base_url is
+# set. Same rule as [inference]: loopback or a private range only, every call audited,
+# and the waivers there (allow_public_endpoint, allow_overlay_network) apply here too.
+# base_url = "http://127.0.0.1:8178"
+language = "de"
+# Names the model the server was started with, for the audit log and the note header.
+model_label = "large-v3-turbo"
+timeout_ms = 1800000
+max_upload_mb = 200
+
+[hub]
+# Set by `cyberbrain hub enrol <invitation>`. Without a url this store sends nothing, and
+# `audit-sync` shows as disabled in `cyberbrain policy egress`. The device token is not
+# here on purpose: this file lives in the store, and a store lives in a repository.
+# url = "https://hub.example.internal:7788"
+allow_public_hub = false
+# Share notes with the hub, not only audit rows. Off until somebody decides otherwise:
+# enrolling a store is about evidence, sharing its notes is about content. Rings 0 and 1
+# stay on this machine either way, and so does any note without a `bereich`.
+allow_note_sync = false
+
+[policy]
+# eu | ch | off. "off" compiles the checks in and disables them.
+profile = "eu"

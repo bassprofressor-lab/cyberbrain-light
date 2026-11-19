@@ -229,9 +229,9 @@ checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
 name = "cyberbrain-core"
-version = "0.10.1"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4cd50d9a613b380eef9b0e45ea60356b2b6f6c1fa3874277f48e9130b00f925"
+checksum = "95864865a9590351ccac35ed6cd807d43f6dfd7c2b467f68bbc69dfb23851ec4"
 dependencies = [
  "blake3",
  "icu_normalizer",
@@ -246,9 +246,9 @@ dependencies = [
 
 [[package]]
 name = "cyberbrain-index"
-version = "0.10.1"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a7d3e0b48ceb90bca6ad0adbe05e977979e5b79bcc37420ac9dec1f39b3ec26"
+checksum = "27bd4810f5efdf1edb587254d003f4a5820736b9c36b546fd6ea4110feaa4a1d"
 dependencies = [
  "blake3",
  "cyberbrain-core",
