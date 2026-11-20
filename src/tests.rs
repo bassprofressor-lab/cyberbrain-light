@@ -2324,3 +2324,66 @@ fn an_empty_index_beside_notes_on_disk_says_to_scan() {
     assert!(!r.caveats.iter().any(|c| c.contains("cbl scan")));
     assert!(!crate::render::status_text(&app.status().unwrap()).contains("cbl scan"));
 }
+
+/// L11 (2026-11-19): the command line and the MCP tool checked their input differently. The
+/// CLI wrote an empty note that MCP refused, MCP took a number for a query as an empty
+/// search, a name `.cyberbrainignore` hides was written and indexed until the next scan
+/// dropped it, and device names Windows cannot create (`con`, `nul`) were taken.
+#[test]
+fn the_command_line_and_mcp_check_their_input_alike() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    let req = |name: &str, body: &str| WriteRequest {
+        ring: Ring::try_from(2).unwrap(),
+        kind: NoteKind::Knowledge,
+        name: name.into(),
+        body: body.into(),
+        tags: vec![],
+    };
+    assert!(
+        app.write_note(req("leer", "  \n")).is_err(),
+        "an empty note"
+    );
+    assert!(!root.join("notes/r2/leer.md").exists());
+    for name in ["con", "NUL", "com1", "lpt9", "aux", "prn"] {
+        let lower = name.to_lowercase();
+        assert!(app.write_note(req(&lower, "text")).is_err(), "{name}");
+        assert!(
+            !root.join(format!("notes/r2/{lower}.md")).exists(),
+            "{name}"
+        );
+    }
+    app.write_note(req("console", "a name that only starts like one"))
+        .expect("console is a name");
+
+    std::fs::write(root.join(".cyberbrainignore"), "wissen.md\n").unwrap();
+    std::fs::write(
+        root.join("notes/r2/.cyberbrainignore"),
+        "geheim-*.md\n!geheim-ok.md\n",
+    )
+    .unwrap();
+    for hidden in ["wissen", "geheim-eins"] {
+        let e = app.write_note(req(hidden, "text")).unwrap_err();
+        assert!(format!("{e:#}").contains(".cyberbrainignore"), "{e:#}");
+        assert!(!root.join(format!("notes/r2/{hidden}.md")).exists());
+    }
+    app.write_note(req("geheim-ok", "text"))
+        .expect("let back in by `!`");
+    app.write_note(req("anderes-wissen", "text"))
+        .expect("not hidden");
+    assert_eq!(app.scan(false).unwrap().ignored, 0);
+
+    let mut s = mcp_server(&root);
+    let r = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"recall","arguments":{"query":123}}}"#,
+    )
+    .unwrap();
+    assert_eq!(r["result"]["isError"], true, "{r}");
+    let r = rpc(
+        &mut s,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write","arguments":{"ring":2,"kind":"knowledge","name":"nul","body":"x"}}}"#,
+    )
+    .unwrap();
+    assert_eq!(r["result"]["isError"], true, "{r}");
+}

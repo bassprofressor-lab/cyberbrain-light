@@ -246,7 +246,14 @@ impl Server {
                     None | Some(Value::Null) => None,
                     Some(v) => Some(ring_of(v)?),
                 };
-                let result = app.recall(&s("query"), n.clamp(1, 50), ring)?;
+                // Checked like the command line, which takes only text (L11, 2026-11-19):
+                // a number was searched as an empty query.
+                let query = match args.get("query") {
+                    Some(Value::String(q)) => q.clone(),
+                    None | Some(Value::Null) => String::new(),
+                    Some(v) => anyhow::bail!("`query` must be text, not {v}"),
+                };
+                let result = app.recall(&query, n.clamp(1, 50), ring)?;
                 Ok(crate::render::hits_text(&result))
             }
             "recall_id" => {

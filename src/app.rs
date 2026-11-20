@@ -589,6 +589,24 @@ impl App {
         if self.agent && req.ring.is_resident() {
             return Err(operator_rings("write", req.ring));
         }
+        // The same checks for the command line and for MCP (L11, 2026-11-19).
+        if req.body.trim().is_empty() {
+            bail!("`{name}` has no text; an empty note is not a note");
+        }
+        if windows_device(&name) {
+            bail!(
+                "name `{name}` is a device name on Windows, where its file cannot be created; \
+                 a store is meant to be cloned anywhere, so pick another"
+            );
+        }
+        let target = self.store.note_path(req.ring, &name)?;
+        if hidden_by_ignore(self.store.root(), &target) {
+            bail!(
+                "a .cyberbrainignore hides `{name}`: the note would be written and then left \
+                 out of the index and the session start. Pick another name, or change the \
+                 .cyberbrainignore first"
+            );
+        }
 
         let existing = match self.store.read(&name) {
             Ok(n) => Some(n),
@@ -1151,6 +1169,58 @@ impl App {
             .map(|m| m.len())
             .unwrap_or(0)
     }
+}
+
+/// Names Windows reserves for devices, with or without an extension: a file of that name
+/// cannot be created there, and a store is a directory in a repository anyone may clone.
+fn windows_device(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).to_ascii_lowercase();
+    matches!(stem.as_str(), "con" | "prn" | "aux" | "nul")
+        || ((stem.starts_with("com") || stem.starts_with("lpt"))
+            && stem.len() == 4
+            && stem.as_bytes()[3].is_ascii_digit()
+            && stem.as_bytes()[3] != b'0')
+}
+
+/// Whether a `.cyberbrainignore` keeps `path` (a note file inside a ring directory) out of
+/// the store's listing: the one at the store root, the one in `notes/` and the one in the
+/// ring directory, the nearer one deciding, as the listing reads them.
+fn hidden_by_ignore(root: &Path, path: &Path) -> bool {
+    use ignore::gitignore::GitignoreBuilder;
+    let notes = root.join("notes");
+    let ring_dir = path.parent().unwrap_or(&notes).to_path_buf();
+    let files = [
+        (
+            ring_dir.clone(),
+            ring_dir.join(cyberbrain_core::store::IGNORE_FILE),
+        ),
+        (
+            notes.clone(),
+            notes.join(cyberbrain_core::store::IGNORE_FILE),
+        ),
+        (
+            root.to_path_buf(),
+            root.join(cyberbrain_core::store::IGNORE_FILE),
+        ),
+    ];
+    for (base, file) in files {
+        if !file.is_file() {
+            continue;
+        }
+        let mut b = GitignoreBuilder::new(&base);
+        if b.add(&file).is_some() {
+            continue;
+        }
+        let Ok(matcher) = b.build() else { continue };
+        let m = matcher.matched_path_or_any_parents(path, false);
+        if m.is_ignore() {
+            return true;
+        }
+        if m.is_whitelist() {
+            return false;
+        }
+    }
+    false
 }
 
 /// Run a recall again when a hit vanished between the ranking and the read of its block (L9,
