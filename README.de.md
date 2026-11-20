@@ -153,7 +153,7 @@ könnte.
 
 **Der Store ist derselbe.** Gleiches Verzeichnis, gleiches Markdown, gleiche Ringe, gleiche
 Zitate. Wer mit Light anfängt und später Cyberbrain installiert, holt mit einem
-`cyberbrain scan` jede Notiz ab, die schon da ist. Light 0.2.3 liest den Index von Cyberbrain
+`cyberbrain scan` jede Notiz ab, die schon da ist. Light ab 0.2.3 liest den Index von Cyberbrain
 ab 0.10.6 (Schema 7), Notizen mit `anchors:` eingeschlossen, und hebt einen älteren darauf an; danach öffnen ihn Light 0.2.2 und Cyberbrain
 vor 0.10.6 nicht mehr. Light schreibt seine drei Einstellungen
 nach `light.toml` und fasst die `cyberbrain.toml` des großen Produkts nie an, ein von beiden

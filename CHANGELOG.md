@@ -12,6 +12,51 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+## [0.2.4] - unreleased
+
+Fixes from the review of 2026-11-19 (findings L3 to L29 of its Light part).
+
+- **A note deleted by hand and written again replaces the old one.** `cbl write` of a name
+  whose file had been deleted failed on the index after the new file was already on disk;
+  search then quoted the deleted text and could not find the new one, and neither `scan` nor
+  `doctor --fix` healed it. `write` now checks before it writes, and `scan` drops an index row
+  whose note is gone, also when a new file with a new id took its place.
+- **`scan --full` and `doctor --fix` repair an index that cannot be read.** A damaged or
+  truncated `cyberbrain.db` made both fail, although the error recommended `scan --full`. Such
+  an index is now renamed to `cyberbrain.db.broken` (never deleted) and rebuilt from the notes.
+- **An agent no longer writes or forgets rings 0 and 1 at the command line.** The MCP tool
+  refused this; `cbl write --ring 0` and `cbl forget` through the agent's shell did not, and the
+  agent's text was the next session's operator rule. Both are refused now when `CLAUDECODE` or
+  `CYBERBRAIN_AGENT` is set, and on Linux also when a process above the command carries them or
+  is Claude Code, so `env -u CLAUDECODE` does not change it. The operator writes rings 0 and 1
+  from a terminal of their own. A brake, not a boundary: hand edits under `notes/r0` are not
+  stopped.
+- **The session start marks and fences what it injects.** Outside material (`trust:untrusted`),
+  replaced and expired notes in rings 0 and 1 carry the same marks as in `recall`; control
+  characters are written out, and a line that imitates the hook's own structure (another
+  rule's heading, a citation line) is escaped.
+- **Rules count as injected only where a hook runs.** `recall` leaves rings 0 and 1 out for an
+  agent where hooks put them into the session; a leftover `_managedBy` entry without a command
+  was enough for that before.
+- **Stricter about what can go wrong quietly.** `light.toml` values out of range (`k_lex =
+  100000000` aborted, `k_lex = 0` found nothing) are named on open; an empty index beside notes
+  on disk says to run `cbl scan`; a recall during another process's full scan asks again
+  instead of failing; the walk refuses a store whose rule files others can write; `cbl
+  install` refuses a linked `.claude` directory and a project directory that does not exist.
+- **The command line and MCP check input alike.** An empty body, a name a `.cyberbrainignore`
+  hides and a Windows device name (`con`, `nul` …) are refused by both; MCP `recall` refuses a
+  query that is not text.
+- **Smaller things.** `--body` may start with a hyphen; errors say each thing once and name
+  `cbl init`, not `cyberbrain init`; a moved or copied store gets honest scan messages; `-q`
+  no longer silences `status` and `doctor`; `cbl help` works; `cbl init` leaves no empty
+  `models/`; the pre-compact message no longer promises that every note comes back;
+  expanding a citation asks one query for a successor (115 ms to 9 ms at 10,000 notes in a
+  debug build) and agrees with `recall` about successors not valid yet.
+- **Build.** CI and the release build with `--locked`; Dependabot watches cargo and npm;
+  rustix 1.1.6 in the lock file (RUSTSEC-2026-0486, test dependency only). `ignore` is now a
+  direct dependency, at the version already in the tree. The core crates stay at exactly
+  0.10.7 and the index at schema 7.
+
 ## [0.2.3] - 2026-11-20
 
 - **Light opens a store Cyberbrain 0.10.6 or later has touched, again.** Cyberbrain 0.10.6

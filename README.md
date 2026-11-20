@@ -149,7 +149,7 @@ could.
 
 **The store is the same.** Same directory, same Markdown, same rings, same citations. Start
 with Light and install Cyberbrain later, and one `cyberbrain scan` picks up every note you
-already wrote. Light 0.2.3 reads the index of Cyberbrain 0.10.6 and later (schema 7), notes with `anchors:` included, and brings an older
+already wrote. Light 0.2.3 and later read the index of Cyberbrain 0.10.6 and later (schema 7), notes with `anchors:` included, and bring an older
 one up to it; after that, Light 0.2.2 and Cyberbrain before 0.10.6 no longer open it. Light writes its three settings to `light.toml` and never touches the full
 product's `cyberbrain.toml`, so a store used by both keeps two independent configurations.
 
