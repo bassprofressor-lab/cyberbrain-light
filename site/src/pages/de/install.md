@@ -35,7 +35,7 @@ $ ./cbl-linux-x86_64 --version
 
 ## Was es zur Laufzeit braucht
 
-Nichts. Kein SQLite im System, kein OpenSSL, keinen Modellserver, kein Node. Der Suchindex ist SQLite mit FTS5 und steckt im Programm.
+Nichts außer der C-Bibliothek. Kein SQLite im System, kein OpenSSL, keinen Modellserver, kein Node. Der Suchindex ist SQLite mit FTS5 und steckt im Programm. Das Linux-Programm aus dem Release braucht glibc 2.34 oder neuer (Debian 12, Ubuntu 22.04, RHEL 9 und später); auf älteren Systemen und mit musl (Alpine) von crates.io installieren.
 
 ## Danach
 

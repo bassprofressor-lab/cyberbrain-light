@@ -29,13 +29,13 @@ caveat: search is lexical: it matches the words in the text, not the meaning.
 The caveat is not an apology, it is the contract. Light searches for words, and it says so on every result, so nobody builds on a search that did not happen.
 
 <div class="cards">
-  <div class="card"><div class="k">binary</div><div class="v">5.0 MB</div><div class="s">Linux and Windows</div></div>
-  <div class="card"><div class="k">a search</div><div class="v">3 ms</div><div class="s">8 MB of memory</div></div>
-  <div class="card"><div class="k">session-start hook</div><div class="v">2 ms</div><div class="s">6 MB of memory</div></div>
+  <div class="card"><div class="k">binary</div><div class="v">5.6 MB</div><div class="s">Linux and Windows</div></div>
+  <div class="card"><div class="k">a search</div><div class="v">6 ms</div><div class="s">9 MB of memory</div></div>
+  <div class="card"><div class="k">session-start hook</div><div class="v">4 ms</div><div class="s">7 MB of memory</div></div>
   <div class="card"><div class="k">full reindex</div><div class="v">0.7 s</div><div class="s">1,007 notes, 4,034 blocks</div></div>
 </div>
 
-<sub>Measured on 2026-09-06 against a real store of 1,007 notes, on a server without a GPU (AMD EPYC-Milan, 12 vCPU). Times include process start, because that is what a hook actually pays.</sub>
+<sub>Measured on 2026-11-20 with 0.2.4 against a generated store of 1,000 notes, on a server without a GPU (AMD EPYC-Milan, 12 vCPU); median of 50 runs, the hook on a store without resident notes. Times include process start, because that is what a hook actually pays.</sub>
 
 ## Four ways in
 

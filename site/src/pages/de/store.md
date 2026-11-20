@@ -18,7 +18,7 @@ slug: "store/"
 │   ├── r0/
 │   ├── r1/
 │   └── r2/ …
-├── cyberbrain.db   # der Suchindex (SQLite, FTS5); jederzeit neu mit `cbl scan --full`
+├── cyberbrain.db   # der Suchindex (SQLite, FTS5); jederzeit neu mit `cbl scan --full`, das einen unlesbaren Index vorher als `cyberbrain.db.broken` beiseitelegt
 ├── light.toml      # drei Einstellungen
 └── .light.lock     # gehalten, während cbl schreibt, damit sich zwei Schreibvorgänge nicht kreuzen
 ```
@@ -39,7 +39,7 @@ Jede Notiz liegt in einem nummerierten Ring, und die Nummer sagt, wie sehr man i
 | r3 | Sitzungsprotokolle | bei Suche |
 | r4 | Importiertes oder Ungeprüftes | bei Suche |
 
-Kleinere Nummer heißt mehr Vertrauen. Ring 0 und 1 kommen unter einem [Token-Deckel](#lighttoml) in jede Sitzung mit, damit der Agent die Regeln von Anfang an kennt, statt sie neu zu entdecken. Sie gehören dir: Das MCP-Werkzeug `write` lehnt sie ab.
+Kleinere Nummer heißt mehr Vertrauen. Ring 0 und 1 kommen unter einem [Token-Deckel](#lighttoml) in jede Sitzung mit, damit der Agent die Regeln von Anfang an kennt, statt sie neu zu entdecken. Sie gehören dir: Das MCP-Werkzeug `write` lehnt sie ab, ebenso `cbl write` und `cbl forget`, wenn ein Agent sie aufruft (siehe [write](../commands/#write)).
 
 Eine Notiz bleibt in ihrem Ring. Ein Umzug ist eine Entscheidung und keine Nebenwirkung, deshalb wird ein `write` mit anderem Ring abgelehnt; erst `cbl forget`, dann neu schreiben.
 

@@ -87,7 +87,11 @@ Notes live in numbered rings, and the number is a claim about trust.
 
 Rings 0 and 1 ride along in every session under a token cap, so the agent starts knowing the
 rules instead of rediscovering them. They belong to you: the MCP `write` tool refuses them,
-and says to propose the text instead. Where the hooks put them into every session and
+and so do `cbl write` and `cbl forget` when an agent runs them (`CLAUDECODE` or
+`CYBERBRAIN_AGENT` set, and on Linux also in a process above the command, so `env -u
+CLAUDECODE` does not change it); both say to propose the text instead. You write them from a
+terminal of your own, outside the agent session. That is a brake on the ordinary course of
+work, not a boundary: an agent that edits `notes/r0` by hand is not stopped. Where the hooks put them into every session and
 subagent (`cbl install`, or the full Cyberbrain's), the agent already holds them, so `recall`
 leaves them out when an agent asks (the MCP tool, or `cbl recall` with `CLAUDECODE` or
 `CYBERBRAIN_AGENT` set) and says so; `--ring 0` or `--ring 1` searches them anyway. Without
@@ -106,15 +110,18 @@ no longer valid are marked as such, in the text as well as in `--json`.
 
 | | |
 |---|---|
-| the binary | 5.0 MB |
-| a search | 3 ms, 8 MB of memory |
-| the session-start hook | 2 ms, 6 MB |
-| rebuilding the whole index | 0.7 s |
-| on disk | your notes, plus 18 MB of index |
+| the binary | 5.6 MB (Linux x86-64) |
+| a search | 6 ms, 9 MB of memory |
+| the session-start hook | 4 ms, 7 MB |
+| rebuilding the whole index | 0.6 s |
+| on disk | your notes, plus about 6 MB of index per 1,000 notes |
 
-<sub>Measured on 2026-09-06 against a real store of 1,007 notes and 4,034 blocks, on a server
-with no GPU (AMD EPYC-Milan, 12 vCPU). Times include process start, because that is what a
-hook actually pays.</sub>
+<sub>Measured on 2026-11-20 with 0.2.4 against a generated store of 1,000 notes and 3,000
+blocks (4 MB of notes), on a server with no GPU (AMD EPYC-Milan, 12 vCPU); median of 50 runs.
+Times include process start, because that is what a hook actually pays. The hook was measured
+on a store without resident notes; rings 0 and 1 add what it takes to read them. Search time
+grows with the store and with common words: the review of 2026-11-19 measured 50 ms for
+frequent words at 10,000 notes.</sub>
 
 ## What it does not do
 

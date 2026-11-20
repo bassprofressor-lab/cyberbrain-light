@@ -91,6 +91,6 @@ The server speaks MCP over stdio, answers `initialize` and, since 0.2.0, the 202
 | `write` | `ring` (2, 3 or 4), `kind`, `name`, `body` | write or update a note; an update keeps its tags |
 | `status` | | note counts per ring, the index, the resident budget |
 
-`write` refuses rings 0 and 1. They belong to the person running the project; the tool says to propose the text instead, or to run `cbl write --ring 0 …` yourself.
+`write` refuses rings 0 and 1. They belong to the person running the project; the tool says to propose the text instead, or to run `cbl write --ring 0 …` yourself. The same command run by the agent through its shell is refused too (see [write](../commands/#write)).
 
 > Tool arguments come from the model, and the model reads whatever is in its context, including text from web pages and files. Keeping rings 0 and 1 out of the agent's reach is what stops a prompt injection from rewriting the rules every later session starts with.

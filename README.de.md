@@ -88,7 +88,12 @@ Notizen liegen in nummerierten Ringen, und die Nummer ist eine Aussage über Ver
 
 Ring 0 und 1 fahren in jeder Sitzung mit, gedeckelt über ein Token-Budget, damit der Agent die
 Regeln kennt, statt sie neu zu entdecken. Sie gehören dir: das MCP-Werkzeug `write` weist sie
-ab und sagt, man solle den Text vorschlagen. Wo die Hooks sie in jede Sitzung und jeden
+ab, ebenso `cbl write` und `cbl forget`, wenn ein Agent sie aufruft (`CLAUDECODE` oder
+`CYBERBRAIN_AGENT` gesetzt, unter Linux auch in einem Prozess über dem Befehl, `env -u
+CLAUDECODE` ändert daran also nichts); beide sagen, man solle den Text vorschlagen. Du schreibst
+sie aus einem eigenen Terminal außerhalb der Agentensitzung. Das ist eine Bremse für den
+gewöhnlichen Arbeitsablauf, keine Grenze: Ein Agent, der `notes/r0` von Hand bearbeitet, wird
+nicht aufgehalten. Wo die Hooks sie in jede Sitzung und jeden
 Unteragenten bringen (`cbl install` oder die des großen Cyberbrain), hat der Agent sie schon,
 und `recall` lässt sie weg, wenn ein Agent fragt (das MCP-Werkzeug oder `cbl recall` mit
 gesetztem `CLAUDECODE` oder `CYBERBRAIN_AGENT`), und sagt das dazu; `--ring 0` oder `--ring 1`
@@ -108,15 +113,18 @@ sind als solche markiert, im Text wie in `--json`.
 
 | | |
 |---|---|
-| die Binärdatei | 5,0 MB |
-| eine Suche | 3 ms, 8 MB Arbeitsspeicher |
-| der session-start-Hook | 2 ms, 6 MB |
-| den ganzen Index neu bauen | 0,7 s |
-| auf der Platte | deine Notizen, dazu 18 MB Index |
+| die Binärdatei | 5,6 MB (Linux x86-64) |
+| eine Suche | 6 ms, 9 MB Arbeitsspeicher |
+| der session-start-Hook | 4 ms, 7 MB |
+| den ganzen Index neu bauen | 0,6 s |
+| auf der Platte | deine Notizen, dazu etwa 6 MB Index je 1.000 Notizen |
 
-<sub>Gemessen am 06.09.2026 gegen einen echten Store mit 1.007 Notizen und 4.034 Blöcken, auf
-einem Server ohne GPU (AMD EPYC-Milan, 12 vCPU). Die Zeiten enthalten den Prozessstart, weil
-das der Preis ist, den ein Hook tatsächlich zahlt.</sub>
+<sub>Gemessen am 20.11.2026 mit 0.2.4 gegen einen erzeugten Store mit 1.000 Notizen und 3.000
+Blöcken (4 MB Notizen), auf einem Server ohne GPU (AMD EPYC-Milan, 12 vCPU); Median aus 50
+Läufen. Die Zeiten enthalten den Prozessstart, weil das der Preis ist, den ein Hook tatsächlich
+zahlt. Der Hook wurde an einem Store ohne residente Notizen gemessen; Ring 0 und 1 kommen mit
+dem hinzu, was ihr Lesen kostet. Die Suchzeit wächst mit dem Store und mit häufigen Wörtern: die
+Prüfung vom 19.11.2026 maß 50 ms für häufige Wörter bei 10.000 Notizen.</sub>
 
 ## Was es nicht tut
 

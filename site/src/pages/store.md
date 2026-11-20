@@ -17,7 +17,7 @@ slug: "store/"
 │   ├── r0/
 │   ├── r1/
 │   └── r2/ …
-├── cyberbrain.db   # the search index (SQLite, FTS5); can always be rebuilt with `cbl scan --full`
+├── cyberbrain.db   # the search index (SQLite, FTS5); can always be rebuilt with `cbl scan --full`, which first sets an index it cannot read aside as `cyberbrain.db.broken`
 ├── light.toml      # three settings
 └── .light.lock     # held while cbl writes, so two writes do not cross
 ```
@@ -38,7 +38,7 @@ Every note lives in a numbered ring, and the number is a claim about trust.
 | r3 | session records | on recall |
 | r4 | imported or unverified material | on recall |
 
-A lower number means more trust. Rings 0 and 1 ride along in every session under a [token cap](#lighttoml), so the agent starts knowing the rules instead of rediscovering them. They belong to you: the MCP `write` tool refuses them.
+A lower number means more trust. Rings 0 and 1 ride along in every session under a [token cap](#lighttoml), so the agent starts knowing the rules instead of rediscovering them. They belong to you: the MCP `write` tool refuses them, and so do `cbl write` and `cbl forget` when an agent runs them (see [write](../commands/#write)).
 
 A note stays in its ring. Moving it is a decision, not a side effect, so a `write` that names another ring is refused; `cbl forget` the note and write it again.
 

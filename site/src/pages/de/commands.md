@@ -18,7 +18,7 @@ cbl [OPTIONEN] <BEFEHL>
 |---|---|
 | `--store <STORE>` | Der Store, mit dem gearbeitet wird. Ohne Angabe sucht `cbl` vom Arbeitsverzeichnis aufwärts nach `.cyberbrain`, ein Befehl funktioniert also überall im Projekt. Auch über `CYBERBRAIN_STORE`. |
 | `--json` | Maschinenlesbare Ausgabe. Jeder Befehl, der etwas ausgibt, kann das. |
-| `-q`, `--quiet` | Weniger ausgeben. Fehler landen weiter auf stderr. |
+| `-q`, `--quiet` | Weniger ausgeben: den Bericht von `write`, `scan`, `forget`, `init` und `install`. `status`, `doctor` und `recall` geben ihre Antwort trotzdem aus. Fehler landen weiter auf stderr. |
 | `-h`, `--help` | Hilfe zum Befehl. |
 | `-V`, `--version` | Version ausgeben. |
 
@@ -43,10 +43,12 @@ cbl write --ring <RING> --kind <ART> --name <NAME> --body <TEXT> [--tags <TAGS>]
 | `--ring <RING>` | 0 bis 4, siehe [Ringe](../store/#ringe) |
 | `--kind <ART>` | `knowledge`, `bug`, `lesson`, `decision`, `reference`, `session` |
 | `--name <NAME>` | Kurzname mit Bindestrichen, eindeutig im Store |
-| `--body <TEXT>` | der Text in Markdown; `-` liest ihn von der Standardeingabe |
+| `--body <TEXT>` | der Text in Markdown, nicht leer; `-` liest ihn von der Standardeingabe. Er darf mit einem Bindestrich beginnen |
 | `--tags <TAGS>` | optional, durch Kommas getrennt |
 
 Eine vorhandene Notiz bleibt in ihrem Ring. Ein `write` mit anderem Ring wird abgelehnt, weil ein Umzug ändert, was die Notiz überstimmen darf; wer das wirklich will, löscht sie vorher mit `cbl forget`. Felder, die Light nicht bearbeitet, auch die des vollen Cyberbrain, bleiben bei einer Änderung erhalten. Auch die Tags: Ohne `--tags` bleiben sie, mit `--tags` werden sie ersetzt, außer den Herkunfts-Tags `trust:untrusted` und `src:…`, die immer bleiben.
+
+Ring 0 und 1 gehören dem Betreiber. Ruft ein Agent `write` auf (`CLAUDECODE` oder `CYBERBRAIN_AGENT` gesetzt, unter Linux auch in einem Prozess über dem Befehl), lehnt es sie ab und sagt, man solle den Text vorschlagen; der Betreiber schreibt sie aus einem eigenen Terminal. Ein Name, den eine `.cyberbrainignore` ausblendet, und ein Gerätename, den Windows reserviert (`con`, `nul`, `com1` …), werden abgelehnt, bevor etwas geschrieben ist.
 
 ## scan
 
@@ -54,7 +56,7 @@ Baut den Index aus dem Notizbaum neu. Nötig nach Änderungen von Hand oder nach
 
 | Option | |
 |---|---|
-| `--full` | Index verwerfen und alles neu bauen |
+| `--full` | Index verwerfen und alles neu bauen. Ein Index, der keine lesbare Datenbank ist, wird als `cyberbrain.db.broken` beiseitegelegt (umbenannt, nie gelöscht) und neu gebaut |
 
 ## recall
 
@@ -79,6 +81,8 @@ Löscht eine Notiz, ihre Abschnitte und ihre Einträge im Index.
 cbl forget <NAME>
 ```
 
+Ruft ein Agent `forget` auf, lehnt es Notizen in Ring 0 und 1 ab, wie `write`.
+
 ## status
 
 Was der Store enthält und was der Index weiß: Notizen je Ring, Zustand des Index, das Token-Budget der Ringe 0 und 1.
@@ -89,7 +93,7 @@ Zeigt, wie viel Platz der Store braucht, und räumt auf.
 
 | Option | |
 |---|---|
-| `--fix` | Zusätzlich die Datenbank verdichten und Veraltetes neu bauen |
+| `--fix` | Zusätzlich die Datenbank verdichten und Veraltetes neu bauen; ein unlesbarer Index wird wie bei `scan --full` beiseitegelegt und neu gebaut |
 
 ## hook
 

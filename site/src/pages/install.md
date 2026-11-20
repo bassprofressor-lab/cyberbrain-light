@@ -34,7 +34,7 @@ $ ./cbl-linux-x86_64 --version
 
 ## What it needs at runtime
 
-Nothing. No system SQLite, no OpenSSL, no model server, no Node. The search index is SQLite with FTS5, compiled into the binary.
+Nothing beyond the C library. No system SQLite, no OpenSSL, no model server, no Node. The search index is SQLite with FTS5, compiled into the binary. The Linux release binary needs glibc 2.34 or newer (Debian 12, Ubuntu 22.04, RHEL 9 and later); on older systems and on musl (Alpine), install from crates.io.
 
 ## Then
 

@@ -30,13 +30,13 @@ caveat: search is lexical: it matches the words in the text, not the meaning.
 Der Hinweis am Ende ist keine Entschuldigung, sondern die Abmachung. Light sucht nach Wörtern und sagt das bei jedem Ergebnis, damit niemand auf einer Suche aufbaut, die nicht stattgefunden hat.
 
 <div class="cards">
-  <div class="card"><div class="k">Programm</div><div class="v">5,0 MB</div><div class="s">Linux und Windows</div></div>
-  <div class="card"><div class="k">eine Suche</div><div class="v">3 ms</div><div class="s">8 MB Speicher</div></div>
-  <div class="card"><div class="k">Hook beim Sitzungsstart</div><div class="v">2 ms</div><div class="s">6 MB Speicher</div></div>
+  <div class="card"><div class="k">Programm</div><div class="v">5,6 MB</div><div class="s">Linux und Windows</div></div>
+  <div class="card"><div class="k">eine Suche</div><div class="v">6 ms</div><div class="s">9 MB Speicher</div></div>
+  <div class="card"><div class="k">Hook beim Sitzungsstart</div><div class="v">4 ms</div><div class="s">7 MB Speicher</div></div>
   <div class="card"><div class="k">Index neu bauen</div><div class="v">0,7 s</div><div class="s">1.007 Notizen, 4.034 Abschnitte</div></div>
 </div>
 
-<sub>Gemessen am 06.09.2026 an einem echten Store mit 1.007 Notizen auf einem Server ohne Grafikkarte (AMD EPYC-Milan, 12 vCPU). Die Zeiten enthalten den Prozessstart, denn den zahlt ein Hook tatsächlich.</sub>
+<sub>Gemessen am 20.11.2026 mit 0.2.4 an einem erzeugten Store mit 1.000 Notizen auf einem Server ohne Grafikkarte (AMD EPYC-Milan, 12 vCPU); Median aus 50 Läufen, der Hook an einem Store ohne residente Notizen. Die Zeiten enthalten den Prozessstart, denn den zahlt ein Hook tatsächlich.</sub>
 
 ## Vier Zugänge
 

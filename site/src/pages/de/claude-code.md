@@ -92,6 +92,6 @@ Der Server spricht MCP über stdio, beantwortet `initialize` und seit 0.2.0 auch
 | `write` | `ring` (2, 3 oder 4), `kind`, `name`, `body` | Notiz schreiben oder aktualisieren; die Tags bleiben dabei erhalten |
 | `status` | | Notizen je Ring, Index, Budget der Ringe 0 und 1 |
 
-`write` lehnt Ring 0 und 1 ab. Die gehören der Person, die das Projekt führt; das Werkzeug sagt, man solle den Text vorschlagen oder `cbl write --ring 0 …` selbst ausführen.
+`write` lehnt Ring 0 und 1 ab. Die gehören der Person, die das Projekt führt; das Werkzeug sagt, man solle den Text vorschlagen oder `cbl write --ring 0 …` selbst ausführen. Derselbe Befehl, vom Agenten über seine Shell aufgerufen, wird ebenfalls abgelehnt (siehe [write](../commands/#write)).
 
 > Die Argumente der Werkzeuge kommen vom Modell, und das Modell liest alles, was in seinem Kontext steht, auch Text aus Webseiten und Dateien. Dass Ring 0 und 1 für den Agenten gesperrt sind, verhindert, dass eine Prompt Injection die Regeln umschreibt, mit denen jede spätere Sitzung beginnt.

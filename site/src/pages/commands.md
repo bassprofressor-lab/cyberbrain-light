@@ -17,7 +17,7 @@ cbl [OPTIONS] <COMMAND>
 |---|---|
 | `--store <STORE>` | Store to operate on. Defaults to `.cyberbrain` found from the working directory upwards, so a command works anywhere inside a project. Also read from `CYBERBRAIN_STORE`. |
 | `--json` | Machine-readable output. Every command that prints anything supports it. |
-| `-q`, `--quiet` | Print less. Errors still go to stderr. |
+| `-q`, `--quiet` | Print less: the report of `write`, `scan`, `forget`, `init` and `install`. `status`, `doctor` and `recall` print their answer all the same. Errors still go to stderr. |
 | `-h`, `--help` | Help for the command. |
 | `-V`, `--version` | Print the version. |
 
@@ -42,10 +42,12 @@ cbl write --ring <RING> --kind <KIND> --name <NAME> --body <BODY> [--tags <TAGS>
 | `--ring <RING>` | 0 to 4, see [rings](../store/#rings) |
 | `--kind <KIND>` | `knowledge`, `bug`, `lesson`, `decision`, `reference`, `session` |
 | `--name <NAME>` | kebab-case slug, unique in the store |
-| `--body <BODY>` | the note body in Markdown; `-` reads it from standard input |
+| `--body <BODY>` | the note body in Markdown, not empty; `-` reads it from standard input. It may start with a hyphen |
 | `--tags <TAGS>` | optional, comma-separated |
 
 An existing note keeps its ring. A write that names a different ring is refused, because moving a note changes what it is allowed to override; `cbl forget` it first if the move is what you mean. Fields that Light does not edit, including those the full Cyberbrain writes, are kept on an edit. Tags too: without `--tags` an edit keeps them; with `--tags` it replaces them, except the provenance tags `trust:untrusted` and `src:…`, which always stay.
+
+Rings 0 and 1 belong to the operator. Run by an agent (`CLAUDECODE` or `CYBERBRAIN_AGENT` set, on Linux also in a process above the command), `write` refuses them and says to propose the text; the operator writes them from a terminal of their own. A name a `.cyberbrainignore` hides, and a device name Windows reserves (`con`, `nul`, `com1` …), are refused before anything is written.
 
 ## scan
 
@@ -53,7 +55,7 @@ Rebuild the index from the notes tree. Use it after editing notes by hand or aft
 
 | option | |
 |---|---|
-| `--full` | Discard the index and rebuild everything |
+| `--full` | Discard the index and rebuild everything. An index that is not a readable database is set aside as `cyberbrain.db.broken` (renamed, never deleted) and a new one is built |
 
 ## recall
 
@@ -78,6 +80,8 @@ Delete a note, its blocks and its index rows.
 cbl forget <NAME>
 ```
 
+Run by an agent, `forget` refuses notes in rings 0 and 1, as `write` does.
+
 ## status
 
 What the store holds and what the index knows: notes per ring, index state, the resident token budget.
@@ -88,7 +92,7 @@ Report the store's footprint and tidy it up.
 
 | option | |
 |---|---|
-| `--fix` | Also compact the database and rebuild what is stale |
+| `--fix` | Also compact the database and rebuild what is stale; an unreadable index is set aside and rebuilt as with `scan --full` |
 
 ## hook
 
