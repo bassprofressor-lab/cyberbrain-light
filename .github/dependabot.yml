@@ -5,3 +5,23 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # The Rust dependencies (L17, 2026-11-19). The two core crates are pinned exactly and come
+  # in only with a Light release made for them (index schema), so they are left out here.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: cyberbrain-core
+      - dependency-name: cyberbrain-index
+    groups:
+      cargo:
+        patterns: ["*"]
+  # The documentation site.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    groups:
+      site:
+        patterns: ["*"]

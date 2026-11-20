@@ -2566,3 +2566,31 @@ fn install_does_not_write_through_a_linked_claude_directory_or_invent_a_project(
     assert!(format!("{e:#}").contains("does not exist"), "{e:#}");
     assert!(!typo.exists(), "the project was invented");
 }
+
+/// L17 (2026-11-19): CI and the release built without `--locked`, so nothing held them to
+/// the lock file the crate ships, and Dependabot watched the actions only: the core crates
+/// fell six versions behind without anyone being told.
+#[test]
+fn every_cargo_build_in_ci_is_locked_and_dependabot_watches_cargo() {
+    for name in ["ci.yml", "release.yml"] {
+        let Some(text) = workflow(name) else { continue };
+        for line in text.lines().filter(|l| {
+            ["cargo build", "cargo test", "cargo clippy"]
+                .iter()
+                .any(|c| l.contains(c))
+        }) {
+            assert!(line.contains("--locked"), "{name}: {}", line.trim());
+        }
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if let Ok(dependabot) = std::fs::read_to_string(root.join(".github/dependabot.yml")) {
+        assert!(
+            dependabot.contains("package-ecosystem: cargo"),
+            "{dependabot}"
+        );
+        assert!(
+            dependabot.contains("package-ecosystem: npm"),
+            "{dependabot}"
+        );
+    }
+}
