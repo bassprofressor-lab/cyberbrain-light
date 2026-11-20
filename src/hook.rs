@@ -197,6 +197,17 @@ pub fn note_piece(note: &cyberbrain_core::types::Note) -> String {
         note.front.name,
         note.front.updated.strftime("%Y-%m-%d")
     );
+    // What recall marks on a hit, the session start marks on a rule (L12, 2026-11-19):
+    // outside material in ring 0 or 1 read as the operator's own word.
+    let now = jiff::Timestamp::now();
+    for mark in crate::render::marks(
+        cyberbrain_core::provenance::untrusted_source(&note.front.tags).as_deref(),
+        note.front.superseded_by.as_deref(),
+        note.front.valid_from.filter(|t| *t > now),
+        note.front.invalid_at.filter(|t| *t <= now),
+    ) {
+        piece.push_str(&format!("! {mark}\n"));
+    }
     let (blocks, _) = blocks_of(note, MAX_BLOCK_TOKENS);
     for b in blocks {
         piece.push_str(&format!("[{}]\n{}\n\n", b.citation, b.text.trim()));

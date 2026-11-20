@@ -219,7 +219,7 @@ pub fn expanded_text(e: &Expanded) -> String {
 /// What recall knows about a note besides its text (3, 2026-11-10). The JSON always carried
 /// it; the text did not, and the text is what a person reads and what the MCP tools hand the
 /// model. Outside material is marked as data, a replaced or expired note as such.
-fn marks(
+pub fn marks(
     untrusted: Option<&str>,
     superseded_by: Option<&str>,
     valid_from: Option<jiff::Timestamp>,
