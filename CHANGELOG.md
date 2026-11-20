@@ -12,6 +12,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+- **Release binaries get a build provenance attestation.** The checksum file is made in the
+  same run as the binaries, so whoever could swap one could swap both. Releases after 0.2.4 are
+  attested by GitHub (`gh attestation verify <file> --repo bassprofressor-lab/cyberbrain-light`).
+  The write permissions for it (`id-token`, `attestations`) are on the build job only; the
+  action is pinned to a commit like the others.
+
 - **The session start no longer walks the whole store.** It listed every note to find rings 0
   and 1, so it cost what the store is big: 3.6 ms at 1,000 notes, 19.3 ms at 10,000. It now
   opens `notes/r0` and `notes/r1` only (2.1 ms and 2.6 ms, release build, median of 100

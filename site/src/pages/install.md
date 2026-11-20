@@ -30,6 +30,12 @@ $ chmod +x cbl-linux-x86_64
 $ ./cbl-linux-x86_64 --version
 ```
 
+Binaries of releases after 0.2.4 also carry a GitHub build provenance attestation. The checksum only shows that a download is whole; the attestation says which workflow and commit built it:
+
+```console
+$ gh attestation verify cbl-linux-x86_64 --repo bassprofressor-lab/cyberbrain-light
+```
+
 [Latest release on GitHub](https://github.com/bassprofressor-lab/cyberbrain-light/releases/latest)
 
 ## What it needs at runtime

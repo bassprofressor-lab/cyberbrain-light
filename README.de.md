@@ -52,6 +52,11 @@ $ sha256sum -c SHA256SUMS
 $ ./cbl-linux-x86_64 init
 ```
 
+Binaries von Releases nach 0.2.4 tragen zusätzlich eine GitHub-Herkunftsbescheinigung
+(Build Provenance), die sagt, welcher Ablauf und welcher Commit sie gebaut hat:
+`gh attestation verify cbl-linux-x86_64 --repo bassprofressor-lab/cyberbrain-light`. Die
+Prüfsummendatei allein zeigt nur, dass ein Download vollständig ist.
+
 Linux und Windows. Zur Laufzeit braucht es nichts weiter: kein SQLite aus dem System, kein
 OpenSSL, keinen Modellserver, kein node. `cbl install --undo` nimmt die Hooks wieder heraus,
 und es fasst keinen Eintrag an, den es nicht selbst geschrieben hat.

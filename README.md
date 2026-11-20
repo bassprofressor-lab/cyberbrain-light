@@ -51,6 +51,10 @@ $ sha256sum -c SHA256SUMS
 $ ./cbl-linux-x86_64 init
 ```
 
+Binaries of releases after 0.2.4 also carry a GitHub build provenance attestation, which says
+which workflow and commit built them: `gh attestation verify cbl-linux-x86_64 --repo
+bassprofressor-lab/cyberbrain-light`. The checksum file alone only shows that a download is whole.
+
 Linux and Windows. Nothing is needed at runtime: no system SQLite, no OpenSSL, no model
 server, no node. `cbl install --undo` takes the hooks out again, and it never touches an
 entry it did not write.
