@@ -41,6 +41,29 @@ pub fn run(project: &Path, undo: bool) -> Result<InstallReport> {
     let path = dir.join("settings.json");
     let binary = current_binary();
 
+    // A project that is not there is a typo, not a request to create it (L16, 2026-11-19).
+    if !project.is_dir() {
+        bail!(
+            "{} does not exist or is not a directory; cbl install writes into an existing \
+             project",
+            project.display()
+        );
+    }
+    // The directory is held to the same rule as the file below (L16): through a linked
+    // `.claude` the file landed wherever the link pointed.
+    if let Ok(meta) = std::fs::symlink_metadata(&dir)
+        && meta.file_type().is_symlink()
+    {
+        let target = std::fs::read_link(&dir)
+            .map(|t| t.display().to_string())
+            .unwrap_or_else(|_| "?".into());
+        bail!(
+            "{} is a symbolic link (to {target}); cbl install does not write through links. \
+             Run it in the project the link points into, or add the entry by hand",
+            dir.display()
+        );
+    }
+
     // A link is not replaced (4, 2026-11-10). Writing through a temporary file and a rename
     // put a plain file where the link was and cut it off from what it pointed at; writing
     // through the link instead would change a file outside this project — another project's

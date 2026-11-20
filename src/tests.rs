@@ -2542,3 +2542,27 @@ fn only_an_entry_that_runs_the_hook_counts_as_injecting_the_rules() {
     install::run(d.path(), false).unwrap();
     assert!(resident_injected(&root), "what cbl install writes");
 }
+
+/// L16 (2026-11-19): `cbl install` refused a linked settings.json and wrote through a linked
+/// `.claude` directory into wherever it pointed; a mistyped `--project` created the directory.
+#[cfg(unix)]
+#[test]
+fn install_does_not_write_through_a_linked_claude_directory_or_invent_a_project() {
+    let d = tempfile::tempdir().unwrap();
+    let elsewhere = d.path().join("elsewhere");
+    let project = d.path().join("p6");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    std::fs::create_dir_all(&project).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, project.join(".claude")).unwrap();
+    let e = install::run(&project, false).unwrap_err();
+    assert!(format!("{e:#}").contains("link"), "{e:#}");
+    assert!(
+        !elsewhere.join("settings.json").exists(),
+        "written through the link"
+    );
+
+    let typo = d.path().join("gibt-es-nicht");
+    let e = install::run(&typo, false).unwrap_err();
+    assert!(format!("{e:#}").contains("does not exist"), "{e:#}");
+    assert!(!typo.exists(), "the project was invented");
+}
