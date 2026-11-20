@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
-## [0.2.3] - unreleased
+## [0.2.3] - 2026-11-20
 
 - **Light opens a store Cyberbrain 0.10.6 or later has touched, again.** Cyberbrain 0.10.6
   (16.11.) brought the index to schema 7, and Light 0.2.2 refused every such store with
