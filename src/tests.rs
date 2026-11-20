@@ -2172,3 +2172,26 @@ fn an_agent_is_found_above_a_command_that_dropped_its_marker() {
     assert!(!walk(90), "a loop ends the walk");
     assert!(!walk(12345), "an unknown process ends it too");
 }
+
+/// L7 (2026-11-19): `k_lex = 100000000` aborted recall with a failed allocation of 27 GB,
+/// `k_lex = 0` found nothing and said nothing. A setting out of range is an error that names
+/// it, when the store is opened.
+#[test]
+fn a_setting_out_of_range_is_named_instead_of_crashing_or_finding_nothing() {
+    let (_d, root) = store(8192);
+    for (text, key) in [
+        ("k_lex = 100000000\n", "k_lex"),
+        ("k_lex = 0\n", "k_lex"),
+        ("n = 0\n", "n"),
+        ("n = 5000\n", "n"),
+    ] {
+        std::fs::write(root.join("light.toml"), text).unwrap();
+        let e = App::open(&root)
+            .err()
+            .unwrap_or_else(|| panic!("{text} accepted"));
+        let e = format!("{e:#}");
+        assert!(e.contains(key) && e.contains("light.toml"), "{text}: {e}");
+    }
+    std::fs::write(root.join("light.toml"), "k_lex = 200\nn = 20\n").unwrap();
+    App::open(&root).expect("in range");
+}

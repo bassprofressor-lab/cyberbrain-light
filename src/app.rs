@@ -40,6 +40,11 @@ pub struct LightConfig {
     pub k_lex: usize,
 }
 
+/// The most hits a recall returns, from `light.toml` or `-n`.
+pub const N_MAX: usize = 100;
+/// The most candidates BM25 weighs.
+pub const K_LEX_MAX: usize = 10_000;
+
 impl Default for LightConfig {
     fn default() -> Self {
         Self {
@@ -54,11 +59,29 @@ impl LightConfig {
     pub fn load(root: &Path) -> Result<Self> {
         let path = root.join(CONFIG_FILE);
         match std::fs::read_to_string(&path) {
-            Ok(text) => toml::from_str(&text)
-                .with_context(|| format!("{} is not readable as configuration", path.display())),
+            Ok(text) => {
+                let cfg: Self = toml::from_str(&text).with_context(|| {
+                    format!("{} is not readable as configuration", path.display())
+                })?;
+                cfg.check()
+                    .with_context(|| format!("in {}", path.display()))?;
+                Ok(cfg)
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
         }
+    }
+
+    /// The ranges `n` and `k_lex` must lie in (L7, 2026-11-19). `k_lex = 100000000` made
+    /// recall allocate 27 GB and abort, `k_lex = 0` found nothing without a word.
+    fn check(&self) -> Result<()> {
+        if !(1..=N_MAX).contains(&self.n) {
+            bail!("n must be from 1 to {N_MAX}, not {}", self.n);
+        }
+        if !(1..=K_LEX_MAX).contains(&self.k_lex) {
+            bail!("k_lex must be from 1 to {K_LEX_MAX}, not {}", self.k_lex);
+        }
+        Ok(())
     }
 
     pub fn write(&self, root: &Path) -> Result<PathBuf> {

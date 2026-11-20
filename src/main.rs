@@ -172,7 +172,8 @@ fn run(cli: Cli) -> Result<()> {
                 }
                 (None, Some(q)) => {
                     let ring = ring.map(Ring::try_from).transpose()?;
-                    let result = app.recall(&q, n.unwrap_or(app.cfg.n).max(1), ring)?;
+                    let result =
+                        app.recall(&q, n.unwrap_or(app.cfg.n).clamp(1, app::N_MAX), ring)?;
                     if cli.json {
                         emit(serde_json::json!({
                             "hits": result.hits,
