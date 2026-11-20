@@ -210,9 +210,38 @@ pub fn note_piece(note: &cyberbrain_core::types::Note) -> String {
     }
     let (blocks, _) = blocks_of(note, MAX_BLOCK_TOKENS);
     for b in blocks {
-        piece.push_str(&format!("[{}]\n{}\n\n", b.citation, b.text.trim()));
+        piece.push_str(&format!("[{}]\n{}\n\n", b.citation, as_text(b.text.trim())));
     }
     piece
+}
+
+/// A block's text as the session start shows it (L13, 2026-11-19). Control characters are
+/// written out as recall writes them, and a line that would read as the hook's own structure —
+/// the title, a `## r0` heading of another rule, a citation line — gets a leading backslash, so
+/// one note cannot pass itself off as several, or as the start of the context. The words stay.
+fn as_text(text: &str) -> String {
+    let shown = crate::render::shown(text);
+    let mut out = String::with_capacity(shown.len());
+    for (i, line) in shown.split('\n').enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        if imitates_structure(line) {
+            out.push('\\');
+        }
+        out.push_str(line);
+    }
+    out
+}
+
+fn imitates_structure(line: &str) -> bool {
+    let heading = line
+        .strip_prefix("## r")
+        .is_some_and(|r| r.starts_with(|c: char| c.is_ascii_digit()));
+    let citation = line.strip_prefix("[r").is_some_and(|r| {
+        r.starts_with(|c: char| c.is_ascii_digit()) && r.as_bytes().get(1) == Some(&b'-')
+    });
+    heading || citation || line.starts_with("# Cyberbrain Light")
 }
 
 /// Whether a resident note is too long to be shown at session start at all, whatever else is
