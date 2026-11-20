@@ -86,10 +86,17 @@ pub fn shown(text: &str) -> String {
 }
 
 pub fn scan_text(r: &ScanReport) -> String {
-    let mut out = format!(
+    let mut out = String::new();
+    if let Some(p) = &r.set_aside {
+        out.push_str(&format!(
+            "the index could not be read; it was set aside as {} and rebuilt from the notes\n",
+            p.display()
+        ));
+    }
+    out.push_str(&format!(
         "{} added, {} updated, {} unchanged, {} removed; {} block(s) in {} ms",
         r.added, r.updated, r.unchanged, r.removed, r.blocks, r.ms
-    );
+    ));
     if r.ignored > 0 {
         out.push_str(&format!(
             "\n{} note(s) left the index because .cyberbrainignore hides them",

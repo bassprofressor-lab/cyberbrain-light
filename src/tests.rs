@@ -2011,3 +2011,74 @@ fn a_note_replaced_by_hand_with_a_new_id_is_picked_up_by_scan_and_doctor() {
         );
     }
 }
+
+/// L4 (2026-11-19): an index that is not a readable database. `scan --full` and
+/// `doctor --fix` failed on the way in, although the error recommended `scan --full`; only
+/// deleting the file by hand helped.
+#[test]
+fn an_unreadable_index_is_set_aside_and_rebuilt() {
+    for (how, repair) in [
+        ("garbage", "scan"),
+        ("truncated", "scan"),
+        ("garbage", "doctor"),
+    ] {
+        let (_d, root) = store(8192);
+        let mut app = App::open(&root).unwrap();
+        for i in 0..30 {
+            let filler = "wort ".repeat(400);
+            write(
+                &mut app,
+                2,
+                &format!("n{i}"),
+                &format!("luchs {i} {filler}"),
+            );
+        }
+        drop(app);
+        let db = root.join("cyberbrain.db");
+        let broken: Vec<u8> = match how {
+            "garbage" => (0..5000u32).map(|i| (i * 7919 % 251) as u8).collect(),
+            _ => std::fs::read(&db).unwrap()[..40_000].to_vec(),
+        };
+        std::fs::write(&db, &broken).unwrap();
+        assert!(App::open(&root).is_err(), "{how}: the index still opens");
+
+        let mut app = App::open_rebuilding(&root).expect("rebuilding opens it");
+        match repair {
+            "scan" => {
+                let r = app.scan(true).unwrap();
+                assert!(r.set_aside.is_some(), "{how}: not said");
+                assert!(crate::render::scan_text(&r).contains("set aside"));
+            }
+            _ => {
+                let d = app.doctor(true).unwrap();
+                assert!(
+                    d.findings.iter().any(|f| f.contains("set aside")),
+                    "{:?}",
+                    d.findings
+                );
+            }
+        }
+        assert_eq!(
+            app.recall("luchs", 50, None).unwrap().hits.len(),
+            30,
+            "{how}/{repair}"
+        );
+        let aside = root.join("cyberbrain.db.broken");
+        assert_eq!(std::fs::read(&aside).unwrap(), broken, "kept, not deleted");
+        drop(app);
+        App::open(&root).expect("and opens normally afterwards");
+    }
+}
+
+/// L4: only a file that is not a database is moved. A newer schema is not damage.
+#[test]
+fn an_index_from_a_newer_cyberbrain_is_not_set_aside() {
+    let (_d, root) = store(8192);
+    drop(App::open(&root).unwrap());
+    sql(
+        &root,
+        "UPDATE meta SET value = '99' WHERE key = 'schema_version';",
+    );
+    assert!(App::open_rebuilding(&root).is_err());
+    assert!(!root.join("cyberbrain.db.broken").exists());
+}

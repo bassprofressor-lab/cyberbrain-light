@@ -245,11 +245,82 @@ fn open_index(path: &Path) -> Result<Index> {
             )
         }
         Err(e) => Err(anyhow::Error::new(e).context(format!(
-            "opening the index at {}; `cbl scan --full` rebuilds it from the notes, and if it \
-             cannot be opened at all, a newer cbl may be what it needs",
+            "opening the index at {}; `cbl scan --full` rebuilds it from the notes, and sets \
+             an index it cannot read aside first (renamed, not deleted)",
             path.display()
         ))),
     }
+}
+
+/// Whether an error says the index file is not a readable SQLite database: random bytes, a
+/// truncated file, a damaged page. Not a lock, not a permission, not a newer schema: those
+/// are not cured by building a new file, and the file stays where it is.
+pub fn index_unreadable(e: &anyhow::Error) -> bool {
+    e.chain().any(|c| {
+        let s = c.to_string();
+        s.contains("file is not a database")
+            || s.contains("database disk image is malformed")
+            || s.contains("database corruption")
+    })
+}
+
+/// Rename an index Light cannot read, with its SQLite side files, to
+/// `cyberbrain.db.broken` (then `.broken.1`, `.2` …), so a new one can be built in its place
+/// (L4, 2026-11-19). Renamed and never deleted: the index belongs to the store, the full
+/// Cyberbrain may keep things in it the notes do not give back, and whoever wants to look at
+/// what broke still can. The side files go with it so the new database does not replay the
+/// old one's journal.
+pub fn set_index_aside(db: &Path) -> Result<PathBuf> {
+    let base = {
+        let mut s = db.as_os_str().to_owned();
+        s.push(".broken");
+        PathBuf::from(s)
+    };
+    let aside = (0u32..)
+        .map(|n| {
+            if n == 0 {
+                base.clone()
+            } else {
+                let mut s = base.clone().into_os_string();
+                s.push(format!(".{n}"));
+                PathBuf::from(s)
+            }
+        })
+        .find(|p| std::fs::symlink_metadata(p).is_err())
+        .expect("a free name");
+    std::fs::rename(db, &aside).with_context(|| {
+        format!(
+            "setting the unreadable index {} aside as {}",
+            db.display(),
+            aside.display()
+        )
+    })?;
+    for side in ["-wal", "-shm", "-journal"] {
+        let mut from = db.as_os_str().to_owned();
+        from.push(side);
+        let from = PathBuf::from(from);
+        if std::fs::symlink_metadata(&from).is_ok() {
+            let mut to = aside.as_os_str().to_owned();
+            to.push(side);
+            std::fs::rename(&from, PathBuf::from(&to))
+                .with_context(|| format!("setting {} aside", from.display()))?;
+        }
+    }
+    Ok(aside)
+}
+
+/// Exclusive until the returned file is dropped: Light's write lock on a store.
+fn lock_store(root: &Path) -> Result<std::fs::File> {
+    let path = root.join(LOCK_FILE);
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .with_context(|| format!("opening {}", path.display()))?;
+    file.lock()
+        .with_context(|| format!("locking {}", path.display()))?;
+    Ok(file)
 }
 
 pub struct App {
@@ -265,6 +336,9 @@ pub struct App {
     /// (6, 2026-11-10). Only then does `agent` leave them out: without the hook the agent holds
     /// them nowhere, and recall is the only way it meets the operator's rules.
     pub resident_injected: bool,
+    /// Where an unreadable index was moved by [`App::open_rebuilding`], and why it could not
+    /// be read. The next full scan reports it.
+    pub set_aside: Option<(PathBuf, String)>,
 }
 
 /// Whether the project a store sits in has hooks that inject rings 0 and 1 at the start of a
@@ -325,6 +399,7 @@ impl App {
             cfg,
             agent: false,
             resident_injected: resident_injected(root),
+            set_aside: None,
         })
     }
 
@@ -355,6 +430,7 @@ impl App {
                 cfg,
                 agent: false,
                 resident_injected: resident_injected(root),
+                set_aside: None,
             },
             existed,
         ))
@@ -364,16 +440,28 @@ impl App {
 
     /// Exclusive until the returned file is dropped.
     fn lock(&self) -> Result<std::fs::File> {
-        let path = self.store.root().join(LOCK_FILE);
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(&path)
-            .with_context(|| format!("opening {}", path.display()))?;
-        file.lock()
-            .with_context(|| format!("locking {}", path.display()))?;
-        Ok(file)
+        lock_store(self.store.root())
+    }
+
+    /// [`App::open`] for the two commands that rebuild the index, `scan --full` and
+    /// `doctor --fix` (L4, 2026-11-19). An index that is not a readable database made both
+    /// fail on the way in, and the error recommended exactly `scan --full`. Here such an index
+    /// is set aside ([`set_index_aside`]) and a new one opened; the command then rebuilds it
+    /// and says where the old file went. Any other failure is returned as it is.
+    pub fn open_rebuilding(root: &Path) -> Result<Self> {
+        match Self::open(root) {
+            Ok(app) => Ok(app),
+            Err(e) if index_unreadable(&e) => {
+                let aside = {
+                    let _lock = lock_store(root)?;
+                    set_index_aside(&root.join("cyberbrain.db"))?
+                };
+                let mut app = Self::open(root)?;
+                app.set_aside = Some((aside, format!("{:#}", e.root_cause())));
+                Ok(app)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub fn write_note(&mut self, req: WriteRequest) -> Result<Written> {
@@ -502,8 +590,18 @@ impl App {
     pub fn scan(&mut self, full: bool) -> Result<ScanReport> {
         let _lock = self.lock()?;
         let started = std::time::Instant::now();
-        if full {
-            self.index.clear()?;
+        if full && let Err(e) = self.index.clear() {
+            // A file that opens and is damaged further in (L4, 2026-11-19).
+            let e = anyhow::Error::new(e);
+            if !index_unreadable(&e) {
+                return Err(e);
+            }
+            let db = self.store.db_path();
+            // Closed before it is moved: Windows does not rename an open file.
+            drop(std::mem::replace(&mut self.index, Index::open_in_memory()?));
+            let aside = set_index_aside(&db)?;
+            self.index = open_index(&db)?;
+            self.set_aside = Some((aside, format!("{:#}", e.root_cause())));
         }
         let listing = self.store.list()?;
         let mut report = ScanReport {
@@ -512,6 +610,11 @@ impl App {
                 .iter()
                 .map(|s| format!("{}: {}", s.path.display(), s.reason))
                 .collect(),
+            set_aside: if full {
+                self.set_aside.take().map(|(p, _)| p)
+            } else {
+                None
+            },
             ..Default::default()
         };
 
@@ -771,6 +874,23 @@ impl App {
     /// The footprint, the integrity checks, and — with `--fix` — the two repairs that are
     /// safe to make without asking: reindex what drifted, and compact the database.
     pub fn doctor(&mut self, fix: bool) -> Result<Doctor> {
+        // Opened by `open_rebuilding` over an unreadable index: rebuilt first, then checked.
+        if fix && let Some((aside, why)) = self.set_aside.clone() {
+            let mut report = self.scan(true)?;
+            // Said once, in the finding below.
+            report.set_aside = None;
+            let mut d = self.doctor(true)?;
+            d.findings.insert(
+                0,
+                format!(
+                    "the index could not be read ({why}); it was set aside as {} and rebuilt \
+                     from the notes",
+                    aside.display()
+                ),
+            );
+            d.repaired.get_or_insert(report);
+            return Ok(d);
+        }
         let mut findings = self.index.integrity()?;
         let listing = self.store.list()?;
 
@@ -942,6 +1062,12 @@ pub struct ScanReport {
     pub oversized: usize,
     pub links_written_back: usize,
     pub skipped: Vec<String>,
+    /// Where an index that could not be read was moved before this scan rebuilt it.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "cyberbrain_core::path_serde::slash_opt"
+    )]
+    pub set_aside: Option<PathBuf>,
     pub ms: u64,
     pub stats: Option<IndexStats>,
 }

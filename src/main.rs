@@ -143,7 +143,11 @@ fn run(cli: Cli) -> Result<()> {
 
         Cmd::Scan { full } => {
             let root = find_store(cli.store, &cwd)?;
-            let mut app = App::open(&root)?;
+            let mut app = if full {
+                App::open_rebuilding(&root)?
+            } else {
+                App::open(&root)?
+            };
             let report = app.scan(full)?;
             if cli.json {
                 emit(serde_json::to_value(&report)?)?;
@@ -205,7 +209,11 @@ fn run(cli: Cli) -> Result<()> {
 
         Cmd::Doctor { fix } => {
             let root = find_store(cli.store, &cwd)?;
-            let mut app = App::open(&root)?;
+            let mut app = if fix {
+                App::open_rebuilding(&root)?
+            } else {
+                App::open(&root)?
+            };
             let d = app.doctor(fix)?;
             let clean = d.findings.is_empty();
             if cli.json {
