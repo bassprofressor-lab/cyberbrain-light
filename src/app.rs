@@ -214,10 +214,28 @@ fn refused(store: &Path, me: Option<Account>) -> Option<String> {
         notes.join("r0"),
         notes.join("r1"),
     ];
-    for dir in dirs {
-        let Ok(meta) = std::fs::metadata(&dir) else {
+    // And the rule files in rings 0 and 1 (L14, 2026-11-19): a file others can write is a
+    // rule they can rewrite, whatever its directory allows. Not followed through links, which
+    // the store does not read anyway.
+    let files = [notes.join("r0"), notes.join("r1")]
+        .into_iter()
+        .filter_map(|d| std::fs::read_dir(d).ok())
+        .flatten()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "md"));
+    let dirs = dirs.into_iter().map(|d| (d, true));
+    for (dir, is_dir) in dirs.chain(files.map(|f| (f, false))) {
+        let meta = if is_dir {
+            std::fs::metadata(&dir)
+        } else {
+            std::fs::symlink_metadata(&dir)
+        };
+        let Ok(meta) = meta else {
             continue;
         };
+        if meta.file_type().is_symlink() {
+            continue;
+        }
         let mode = meta.mode() & 0o7777;
         if meta.uid() != me.uid {
             return Some(format!(

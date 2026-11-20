@@ -2457,3 +2457,32 @@ fn a_resident_note_cannot_imitate_another_rule_or_pass_control_characters() {
         "the text stays readable"
     );
 }
+
+/// L14 (2026-11-19): the walk refused a store whose ring 0/1 directories others could write,
+/// and took one whose rule files they could: `chmod 666 notes/r0/rule.md` passed.
+#[cfg(unix)]
+#[test]
+fn a_rule_file_others_can_write_is_refused_like_its_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "regel", "nur ich schreibe das");
+    write(&mut app, 2, "wissen", "darf jeder lesen");
+    let deep = dir.path().join("a");
+    std::fs::create_dir_all(&deep).unwrap();
+    let rule = root.join("notes/r0/regel.md");
+    std::fs::set_permissions(&rule, std::fs::Permissions::from_mode(0o666)).unwrap();
+    let err = find_store(None, &deep).expect_err("a world-writable rule is refused");
+    assert!(format!("{err:#}").contains("regel.md"), "{err:#}");
+    std::fs::set_permissions(&rule, std::fs::Permissions::from_mode(0o644)).unwrap();
+    std::fs::set_permissions(
+        root.join("notes/r2/wissen.md"),
+        std::fs::Permissions::from_mode(0o666),
+    )
+    .unwrap();
+    assert_eq!(
+        find_store(None, &deep).unwrap(),
+        root,
+        "ring 2 is not a rule"
+    );
+}
