@@ -12,6 +12,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
+- **The session start no longer walks the whole store.** It listed every note to find rings 0
+  and 1, so it cost what the store is big: 3.6 ms at 1,000 notes, 19.3 ms at 10,000. It now
+  opens `notes/r0` and `notes/r1` only (2.1 ms and 2.6 ms, release build, median of 100
+  runs, same output byte for byte). A linked file, a file that is not a note and a note
+  `.cyberbrainignore` hides are left out as before.
+
 ## [0.2.4] - 2026-11-20
 
 Fixes from the review of 2026-11-19 (findings L3 to L29 of its Light part).

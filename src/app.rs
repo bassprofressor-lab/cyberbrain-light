@@ -1235,7 +1235,7 @@ fn windows_device(name: &str) -> bool {
 /// Whether a `.cyberbrainignore` keeps `path` (a note file inside a ring directory) out of
 /// the store's listing: the one at the store root, the one in `notes/` and the one in the
 /// ring directory, the nearer one deciding, as the listing reads them.
-fn hidden_by_ignore(root: &Path, path: &Path) -> bool {
+pub(crate) fn hidden_by_ignore(root: &Path, path: &Path) -> bool {
     use ignore::gitignore::GitignoreBuilder;
     let notes = root.join("notes");
     let ring_dir = path.parent().unwrap_or(&notes).to_path_buf();

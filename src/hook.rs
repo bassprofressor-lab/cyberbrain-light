@@ -253,12 +253,61 @@ pub fn too_long_to_show(note: &cyberbrain_core::types::Note) -> Option<usize> {
     (chars > CONTEXT_CHAR_CAP).then_some(chars)
 }
 
+/// The note files of rings 0 and 1, in path order, and how many directory entries were looked
+/// at to find them. Same rules as `Store::list` for what counts as a note (not hidden, not a
+/// link, `.md`, a valid note name, not hidden by a `.cyberbrainignore`), but it opens two
+/// directories instead of walking the tree.
+pub fn resident_paths(app: &App) -> Result<(Vec<std::path::PathBuf>, usize)> {
+    let mut paths = Vec::new();
+    let mut examined = 0usize;
+    for ring in [Ring::Invariant, Ring::Protocol] {
+        let dir = app.store.ring_dir(ring);
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                return Err(cyberbrain_core::Error::Io {
+                    path: dir,
+                    source: e,
+                }
+                .into());
+            }
+        };
+        let mut found = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|e| cyberbrain_core::Error::Io {
+                path: dir.clone(),
+                source: e,
+            })?;
+            examined += 1;
+            let path = entry.path();
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            let is_file = entry.file_type().is_ok_and(|t| t.is_file());
+            if file_name.starts_with('.')
+                || !is_file
+                || path.extension().and_then(|e| e.to_str()) != Some("md")
+            {
+                continue;
+            }
+            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+            if cyberbrain_core::frontmatter::validate_name(&stem).is_err()
+                || crate::app::hidden_by_ignore(app.store.root(), &path)
+            {
+                continue;
+            }
+            found.push(path);
+        }
+        found.sort();
+        paths.extend(found);
+    }
+    Ok((paths, examined))
+}
+
 /// Rings 0 and 1, rendered with their citations, cut at the token cap and at the character
 /// cap, whichever comes first.
 ///
-/// The notes come from `Store::list`, so `.cyberbrainignore` applies here as it does to
-/// `status` and `scan`. Listing walks the tree without reading it; only rings 0 and 1 are
-/// opened, so what this costs is still bounded by the cap. An invariant that cannot be read
+/// The notes come from `resident_paths`, so `.cyberbrainignore` applies here as it does to
+/// `status` and `scan`, and only the two ring directories are opened. An invariant that cannot be read
 /// is reported rather than skipped in silence.
 fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<String>)> {
     let mut notes = Vec::new();
@@ -271,15 +320,16 @@ fn resident_context(app: &App, source: Option<&str>) -> Result<(String, Vec<Stri
     let mut too_long: Vec<String> = Vec::new();
     let mut unreadable: Vec<String> = Vec::new();
 
-    // Through the store's listing, which honours `.cyberbrainignore` (L4, 2026-10-31): a
-    // resident note the operator hid is the one that must not ride along any more.
-    let listing = app.store.list()?;
+    // Only the two resident rings are looked at (L26, 2026-11-19), not the whole tree: the hook
+    // costs what rings 0 and 1 hold, however large the rest of the store is. `.cyberbrainignore`
+    // still applies (L4, 2026-10-31): a resident note the operator hid is the one that must
+    // not ride along any more.
+    let (resident, _) = resident_paths(app)?;
     for ring in [Ring::Invariant, Ring::Protocol] {
-        let paths: Vec<_> = listing
-            .entries
+        let paths: Vec<_> = resident
             .iter()
-            .filter(|e| e.ring == ring)
-            .map(|e| e.path.clone())
+            .filter(|p| p.parent() == Some(app.store.ring_dir(ring).as_path()))
+            .cloned()
             .collect();
 
         for path in paths {

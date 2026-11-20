@@ -500,6 +500,66 @@ fn session_start_honours_cyberbrainignore() {
     assert!(!ctx.contains("ALTES PROTOKOLL"), "{ctx}");
 }
 
+/// L26 (2026-11-19): the session start listed the whole notes tree to find rings 0 and 1, so
+/// it cost what the store is big, not what the resident rings are (5 ms at 1,000 notes, 24 ms
+/// at 10,000). It now looks at `notes/r0` and `notes/r1` only. Nothing in the hook's output
+/// shows which directories it walked, so the test counts the directory entries the resident
+/// listing examined.
+#[test]
+fn session_start_looks_only_at_rings_0_and_1() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "invariants", "Never deploy on a Friday.");
+    write(&mut app, 1, "protokoll", "Deploy only from main.");
+    for i in 0..30 {
+        write(&mut app, 2 + i % 3, &format!("notiz-{i}"), "Not resident.");
+    }
+    drop(app);
+    let app = App::open(&root).unwrap();
+
+    let (paths, examined) = hook::resident_paths(&app).unwrap();
+    assert_eq!(paths.len(), 2);
+    assert_eq!(examined, 2, "30 notes in rings 2 to 4 were looked at too");
+
+    let out = hook::run(HookEvent::SessionStart, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let ctx = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(ctx.contains("Never deploy on a Friday.") && ctx.contains("Deploy only from main."));
+    assert!(!ctx.contains("Not resident"));
+}
+
+/// The resident listing keeps what the full listing refused: a linked file, a file that is not
+/// a note and a name that is not a note name are not read.
+#[cfg(unix)]
+#[test]
+fn the_resident_listing_skips_what_the_store_listing_skips() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "gut", "Eine Regel.");
+    drop(app);
+    let r0 = root.join("notes").join("r0");
+    std::fs::write(root.join("fremd.md"), "outside").unwrap();
+    std::os::unix::fs::symlink(root.join("fremd.md"), r0.join("link.md")).unwrap();
+    std::fs::write(r0.join("notizen.txt"), "x").unwrap();
+    std::fs::write(r0.join(".versteckt.md"), "x").unwrap();
+    std::fs::write(r0.join("Gross Name.md"), "x").unwrap();
+    let app = App::open(&root).unwrap();
+    let full: Vec<_> = app
+        .store
+        .list()
+        .unwrap()
+        .entries
+        .into_iter()
+        .filter(|e| e.ring == cyberbrain_core::types::Ring::Invariant)
+        .map(|e| e.path)
+        .collect();
+    let (paths, _) = hook::resident_paths(&app).unwrap();
+    assert_eq!(paths, full);
+    assert_eq!(paths.len(), 1);
+}
+
 #[test]
 fn the_resident_cap_holds_and_is_reported() {
     let (_d, root) = store(8192);
