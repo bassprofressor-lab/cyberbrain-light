@@ -403,20 +403,45 @@ pub fn resident_injected(store_root: &Path) -> bool {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
             continue;
         };
-        let ours = |event: &str| {
+        // Marked as ours or the full Cyberbrain's, and running the hook for this very event
+        // (L15, 2026-11-19): the mark alone made a leftover entry without a command count,
+        // and an agent's recall then left out rules no hook put anywhere.
+        let ours = |event: &str, args: &[&str]| {
             v["hooks"][event].as_array().is_some_and(|list| {
                 list.iter().any(|e| {
                     matches!(
                         e.get("_managedBy").and_then(serde_json::Value::as_str),
                         Some("cyberbrain-light" | "cyberbrain")
-                    )
+                    ) && args.iter().any(|a| runs_hook(e, a))
                 })
             })
         };
-        session |= ours("SessionStart");
-        subagent |= ours("SubagentStart");
+        // The full Cyberbrain splits its session start in two since 0.7.10; the rings come
+        // with `session-rings`.
+        session |= ours("SessionStart", &["session-start", "session-rings"]);
+        subagent |= ours("SubagentStart", &["subagent-start"]);
     }
     session && subagent
+}
+
+/// Whether a hook entry runs `… hook <arg>`: as `command` plus `args` (what `cbl install`
+/// and the full Cyberbrain write) or as one command string.
+fn runs_hook(entry: &serde_json::Value, arg: &str) -> bool {
+    use serde_json::Value;
+    entry["hooks"].as_array().is_some_and(|hooks| {
+        hooks.iter().any(|h| {
+            let Some(command) = h.get("command").and_then(Value::as_str) else {
+                return false;
+            };
+            let args: Vec<&str> = h
+                .get("args")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            let words: Vec<&str> = command.split_whitespace().chain(args).collect();
+            words.windows(2).any(|w| w == ["hook", arg])
+        })
+    })
 }
 
 /// Who is at this command line, the way the full Cyberbrain tells it: Claude Code sets

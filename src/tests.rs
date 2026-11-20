@@ -2486,3 +2486,59 @@ fn a_rule_file_others_can_write_is_refused_like_its_directory() {
         "ring 2 is not a rule"
     );
 }
+
+/// L15 (2026-11-19): whether rings 0 and 1 count as in the session hung on the `_managedBy`
+/// mark alone. A leftover entry without a command (or an uninstalled Cyberbrain) hid the rules
+/// from an agent's recall.
+#[test]
+fn only_an_entry_that_runs_the_hook_counts_as_injecting_the_rules() {
+    use crate::app::resident_injected;
+    let (d, root) = store(8192);
+    std::fs::create_dir_all(d.path().join(".claude")).unwrap();
+    let local = d.path().join(".claude/settings.local.json");
+    std::fs::write(
+        &local,
+        r#"{"hooks":{"SessionStart":[{"_managedBy":"cyberbrain"}],"SubagentStart":[{"_managedBy":"cyberbrain"}]}}"#,
+    )
+    .unwrap();
+    assert!(!resident_injected(&root), "a mark without a command");
+
+    std::fs::write(
+        &local,
+        r#"{"hooks":{
+            "SessionStart":[{"_managedBy":"cyberbrain","hooks":[{"type":"command","command":"/usr/local/bin/cyberbrain","args":["hook","session-start"]}]}],
+            "SubagentStart":[{"_managedBy":"cyberbrain","hooks":[{"type":"command","command":"/usr/local/bin/cyberbrain hook subagent-start"}]}]}}"#,
+    )
+    .unwrap();
+    assert!(
+        resident_injected(&root),
+        "the full Cyberbrain's entries, args or one string"
+    );
+
+    std::fs::write(
+        &local,
+        r#"{"hooks":{
+            "SessionStart":[{"_managedBy":"cyberbrain","hooks":[{"type":"command","command":"/usr/local/bin/cyberbrain","args":["hook","pre-compact"]}]}],
+            "SubagentStart":[{"_managedBy":"cyberbrain","hooks":[{"type":"command","command":"/usr/local/bin/cyberbrain","args":["hook","subagent-start"]}]}]}}"#,
+    )
+    .unwrap();
+    assert!(!resident_injected(&root), "the wrong event's hook");
+
+    std::fs::write(
+        &local,
+        r#"{"hooks":{
+            "SessionStart":[{"_managedBy":"cyberbrain","hooks":[
+                {"type":"command","command":"/usr/local/bin/cyberbrain","args":["hook","session-rings"]},
+                {"type":"command","command":"/usr/local/bin/cyberbrain","args":["hook","session-context"]}]}],
+            "SubagentStart":[{"_managedBy":"cyberbrain","hooks":[{"type":"command","command":"/usr/local/bin/cyberbrain","args":["hook","subagent-start"]}]}]}}"#,
+    )
+    .unwrap();
+    assert!(
+        resident_injected(&root),
+        "the full Cyberbrain's split session start"
+    );
+
+    std::fs::remove_file(&local).unwrap();
+    install::run(d.path(), false).unwrap();
+    assert!(resident_injected(&root), "what cbl install writes");
+}
