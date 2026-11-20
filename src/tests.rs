@@ -2291,3 +2291,36 @@ fn a_hit_that_vanished_during_recall_is_asked_again() {
     assert!(r.is_err());
     assert!(calls <= 5);
 }
+
+/// L10 (2026-11-19): after the index was deleted (or replaced by an empty file), recall
+/// answered "no hits" and status "0 notes" beside 41 on disk, without a word why.
+#[test]
+fn an_empty_index_beside_notes_on_disk_says_to_scan() {
+    for how in ["deleted", "empty file"] {
+        let (_d, root) = store(8192);
+        let mut app = App::open(&root).unwrap();
+        write(&mut app, 2, "luchs", "der luchs jagt nachts");
+        drop(app);
+        std::fs::remove_file(root.join("cyberbrain.db")).unwrap();
+        if how == "empty file" {
+            std::fs::write(root.join("cyberbrain.db"), b"").unwrap();
+        }
+        let app = App::open(&root).unwrap();
+        let r = app.recall("luchs", 5, None).unwrap();
+        assert!(r.hits.is_empty());
+        assert!(
+            r.caveats.iter().any(|c| c.contains("cbl scan")),
+            "{how}: {:?}",
+            r.caveats
+        );
+        let st = crate::render::status_text(&app.status().unwrap());
+        assert!(st.contains("cbl scan"), "{how}: {st}");
+    }
+    // And a healthy store says nothing of the kind.
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "luchs", "der luchs jagt nachts");
+    let r = app.recall("luchs", 5, None).unwrap();
+    assert!(!r.caveats.iter().any(|c| c.contains("cbl scan")));
+    assert!(!crate::render::status_text(&app.status().unwrap()).contains("cbl scan"));
+}

@@ -927,6 +927,17 @@ impl App {
                     .into(),
             );
         }
+        // An index that holds nothing beside notes on disk was deleted or replaced (L10,
+        // 2026-11-19); "no hits" alone read as "nothing about it here".
+        if self.index.stats()?.notes == 0 {
+            let on_disk = self.store.list()?.entries.len();
+            if on_disk > 0 {
+                result.caveats.push(format!(
+                    "the index is empty but {on_disk} note(s) are on disk: run `cbl scan` to \
+                     index them"
+                ));
+            }
+        }
         // The index says "no embedder configured", which is true of the store and wrong
         // about the tool: nothing here is misconfigured. Say what is actually the case.
         result.caveats.retain(|c| !c.starts_with("semantic search"));

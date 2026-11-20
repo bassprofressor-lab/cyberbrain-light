@@ -128,12 +128,21 @@ pub fn scan_text(r: &ScanReport) -> String {
 }
 
 pub fn status_text(s: &Status) -> String {
+    let hint = if s.stats.notes == 0 && s.notes > 0 {
+        // L10 (2026-11-19): an index deleted or replaced said "0 notes" and nothing else.
+        format!(
+            "\nthe index is empty but {} note(s) are on disk: run `cbl scan` to index them",
+            s.notes
+        )
+    } else {
+        String::new()
+    };
     format!(
         "store: {}\n\
          notes on disk: {} (r0 {}, r1 {}, r2 {}, r3 {}, r4 {}); {} skipped\n\
          resident rings 0+1: ~{} of {} tokens\n\
          index: schema v{}, {} notes, {} blocks, {} links ({} dangling), {} KB\n\
-         search: lexical only, by design. Cyberbrain is the one with a model.",
+         search: lexical only, by design. Cyberbrain is the one with a model.{hint}",
         s.root.display(),
         s.notes,
         s.by_ring[0],
