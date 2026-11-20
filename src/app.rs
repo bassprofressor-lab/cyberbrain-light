@@ -327,7 +327,9 @@ pub struct App {
     pub store: Store,
     pub index: Index,
     pub cfg: LightConfig,
-    /// Whether an agent is asking rather than a person (L12, 2026-10-31). An agent's session
+    /// Whether an agent is asking rather than a person (L12, 2026-10-31). Since 0.2.4 also what
+    /// keeps an agent from writing or forgetting rings 0 and 1 at the command line (L5,
+    /// 2026-11-19), as the MCP tool always did. An agent's session
     /// start injected rings 0 and 1 whole, so `recall` leaves them out for it: a hit from them
     /// is a second copy of its own context. A person has no such context and gets them.
     /// `--ring 0|1` searches them either way. The full Cyberbrain decides it the same way.
@@ -381,9 +383,102 @@ pub fn resident_injected(store_root: &Path) -> bool {
 /// the same. Attribution for the ordinary course of work, not a boundary: an agent controls
 /// its own environment.
 pub fn agent_from_env(var: impl Fn(&str) -> Option<String>) -> bool {
-    ["CLAUDECODE", "CYBERBRAIN_AGENT"]
+    AGENT_MARKERS
         .iter()
         .any(|k| var(k).is_some_and(|v| !v.trim().is_empty()))
+}
+
+/// The variables an agent harness sets for the commands it runs.
+const AGENT_MARKERS: [&str; 2] = ["CLAUDECODE", "CYBERBRAIN_AGENT"];
+/// The program name Claude Code runs under (`/proc/<pid>/comm`).
+const CLAUDE_CODE_COMM: &str = "claude";
+
+/// Whether this command runs for an agent: by its own environment, or (Linux) by the
+/// environment and name of the processes above it (L5, 2026-11-19).
+///
+/// The environment alone is one `env -u CLAUDECODE` away from saying "operator". What a
+/// command cannot change is its ancestors: `/proc/<pid>/environ` is the environment a process
+/// started with, so the shell Claude Code opened for the command still shows `CLAUDECODE=1`,
+/// and Claude Code itself is named `claude`. This is how the full Cyberbrain decides it, and
+/// with the same limits: a process that left the tree (`setsid`, `nohup` whose parent exited,
+/// cron, systemd-run) is no longer below the session, and macOS and Windows have only the
+/// environment. A brake on the ordinary course of work, not a boundary.
+pub fn agent_here() -> bool {
+    if agent_from_env(|k| std::env::var(k).ok()) {
+        return true;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let proc_ = |pid: u32, what: &str| std::fs::read(format!("/proc/{pid}/{what}")).ok();
+        let me = std::process::id();
+        if let Some(parent) = proc_(me, "stat").and_then(|s| parent_in_stat(&s)) {
+            return agent_in_lineage(
+                parent,
+                |p| proc_(p, "stat").and_then(|s| parent_in_stat(&s)),
+                |p| proc_(p, "comm").map(|c| String::from_utf8_lossy(&c).trim().to_string()),
+                |p| proc_(p, "environ"),
+            );
+        }
+    }
+    false
+}
+
+/// The parent pid in a `/proc/<pid>/stat` line. The command name in parentheses may hold
+/// spaces and parentheses itself, so the fields are counted from the last `)`.
+#[cfg(target_os = "linux")]
+fn parent_in_stat(stat: &[u8]) -> Option<u32> {
+    let text = String::from_utf8_lossy(stat);
+    let rest = &text[text.rfind(')')? + 1..];
+    rest.split_whitespace().nth(1)?.parse().ok()
+}
+
+/// Walk from `start` up to PID 1: an ancestor named `claude`, or one whose environment holds
+/// an agent marker, makes this an agent. Bounded, and a loop or an unreadable process ends
+/// the walk.
+pub fn agent_in_lineage(
+    start: u32,
+    parent: impl Fn(u32) -> Option<u32>,
+    comm: impl Fn(u32) -> Option<String>,
+    environ: impl Fn(u32) -> Option<Vec<u8>>,
+) -> bool {
+    let mut pid = start;
+    let mut seen = HashSet::new();
+    for _ in 0..128 {
+        if pid <= 1 || !seen.insert(pid) {
+            return false;
+        }
+        if comm(pid).as_deref() == Some(CLAUDE_CODE_COMM) {
+            return true;
+        }
+        if let Some(env) = environ(pid) {
+            let marked = env.split(|b| *b == 0).any(|kv| {
+                AGENT_MARKERS.iter().any(|m| {
+                    kv.strip_prefix(m.as_bytes())
+                        .and_then(|v| v.strip_prefix(b"="))
+                        .is_some_and(|v| !v.trim_ascii().is_empty())
+                })
+            });
+            if marked {
+                return true;
+            }
+        }
+        match parent(pid) {
+            Some(p) => pid = p,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// What an agent is told when it reaches for rings 0 and 1 (L5, 2026-11-19).
+fn operator_rings(what: &str, ring: Ring) -> anyhow::Error {
+    anyhow!(
+        "rings 0 and 1 belong to the operator, and this command runs in an agent session \
+         (CLAUDECODE or CYBERBRAIN_AGENT is set here or in a process above it), so it does not \
+         {what} ring {}. Propose the text to the operator instead; they run the command in a \
+         terminal of their own, outside the agent session",
+        ring.as_u8()
+    )
 }
 
 impl App {
@@ -468,6 +563,9 @@ impl App {
         let _lock = self.lock()?;
         let name = req.name.trim().to_string();
         frontmatter::validate_name(&name).map_err(|why| anyhow!("name `{name}`: {why}"))?;
+        if self.agent && req.ring.is_resident() {
+            return Err(operator_rings("write", req.ring));
+        }
 
         let existing = match self.store.read(&name) {
             Ok(n) => Some(n),
@@ -838,6 +936,9 @@ impl App {
     pub fn forget(&mut self, name: &str) -> Result<Forgotten> {
         let _lock = self.lock()?;
         let note = self.store.read(name)?;
+        if self.agent && note.front.ring.is_resident() {
+            return Err(operator_rings("forget a note in", note.front.ring));
+        }
         let erasure = self.index.delete_note(&note.front.id)?;
         let path = self.store.remove(name)?;
         Ok(Forgotten {
@@ -1092,7 +1193,7 @@ pub struct Expanded {
     pub body: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct Forgotten {
     pub name: String,
     pub ring: Ring,

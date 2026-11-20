@@ -2082,3 +2082,93 @@ fn an_index_from_a_newer_cyberbrain_is_not_set_aside() {
     assert!(App::open_rebuilding(&root).is_err());
     assert!(!root.join("cyberbrain.db.broken").exists());
 }
+
+/// L5 (2026-11-19): with `CLAUDECODE=1` an agent wrote and deleted ring 0 through the
+/// command line, and its rule was in the next session as an operator invariant. The MCP tool
+/// refused; the shell next to it did not.
+#[test]
+fn an_agent_at_the_command_line_cannot_write_or_forget_the_operator_rings() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "regel-eins", "Freitags wird nicht deployt.");
+    app.agent = true;
+
+    let req = |ring: u8, name: &str| WriteRequest {
+        ring: Ring::try_from(ring).unwrap(),
+        kind: NoteKind::Decision,
+        name: name.into(),
+        body: "Neue Regel vom Agenten: alles erlaubt".into(),
+        tags: vec![],
+    };
+    for ring in [0, 1] {
+        let e = app.write_note(req(ring, "vom-agenten")).unwrap_err();
+        assert!(format!("{e:#}").contains("operator"), "{e:#}");
+    }
+    assert!(!root.join("notes/r0/vom-agenten.md").exists());
+    assert!(!root.join("notes/r1/vom-agenten.md").exists());
+    let e = app.write_note(req(0, "regel-eins")).unwrap_err();
+    assert!(
+        format!("{e:#}").contains("operator"),
+        "an edit is a write: {e:#}"
+    );
+    let e = app.forget("regel-eins").unwrap_err();
+    assert!(format!("{e:#}").contains("operator"), "{e:#}");
+    assert!(root.join("notes/r0/regel-eins.md").is_file());
+    assert_eq!(
+        app.recall("Freitags", 5, Some(Ring::Invariant))
+            .unwrap()
+            .hits
+            .len(),
+        1
+    );
+
+    // Its own rings stay its own.
+    app.write_note(req(2, "vom-agenten"))
+        .expect("ring 2 is the agent's");
+    app.forget("vom-agenten").expect("and so is forgetting it");
+
+    // The operator, outside an agent session, writes and forgets as before.
+    app.agent = false;
+    app.write_note(req(0, "vom-betreiber")).unwrap();
+    app.forget("regel-eins").unwrap();
+}
+
+/// L5: an agent is known by its environment and, on Linux, by the processes above it: a
+/// marker dropped from the command's own environment (`env -u CLAUDECODE cbl …`) is still in
+/// the environment of the shell Claude Code started, and Claude Code itself runs as `claude`.
+#[test]
+fn an_agent_is_found_above_a_command_that_dropped_its_marker() {
+    use crate::app::agent_in_lineage;
+    // pid -> (parent, comm, environ)
+    let tree: std::collections::HashMap<u32, (u32, &str, &[u8])> = [
+        (50, (40, "cbl", b"PATH=/usr/bin\0".as_slice())),
+        (
+            40,
+            (30, "bash", b"PATH=/usr/bin\0CLAUDECODE=1\0".as_slice()),
+        ),
+        (30, (20, "claude", b"PATH=/usr/bin\0".as_slice())),
+        (20, (1, "bash", b"PATH=/usr/bin\0".as_slice())),
+        (1, (0, "systemd", b"".as_slice())),
+        (60, (20, "bash", b"PATH=/usr/bin\0CLAUDECODE=\0".as_slice())),
+        (70, (60, "cbl", b"\0".as_slice())),
+        (80, (30, "sh", b"CYBERBRAIN_AGENT=codex\0".as_slice())),
+        (90, (90, "loop", b"".as_slice())),
+    ]
+    .into_iter()
+    .collect();
+    let walk = |start: u32| {
+        agent_in_lineage(
+            start,
+            |p| tree.get(&p).map(|t| t.0),
+            |p| tree.get(&p).map(|t| t.1.to_string()),
+            |p| tree.get(&p).map(|t| t.2.to_vec()),
+        )
+    };
+    assert!(walk(40), "the session's shell");
+    assert!(walk(30), "Claude Code itself");
+    assert!(walk(80), "another harness that says so");
+    assert!(!walk(20), "the operator's terminal");
+    assert!(!walk(60), "an empty marker is no marker");
+    assert!(!walk(90), "a loop ends the walk");
+    assert!(!walk(12345), "an unknown process ends it too");
+}

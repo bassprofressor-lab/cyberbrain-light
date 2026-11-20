@@ -118,6 +118,7 @@ fn run(cli: Cli) -> Result<()> {
         } => {
             let root = find_store(cli.store, &cwd)?;
             let mut app = App::open(&root)?;
+            app.agent = app::agent_here();
             let body = if body == "-" {
                 let mut s = String::new();
                 std::io::stdin()
@@ -159,7 +160,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Recall { query, id, n, ring } => {
             let root = find_store(cli.store, &cwd)?;
             let mut app = App::open(&root)?;
-            app.agent = app::agent_from_env(|k| std::env::var(k).ok());
+            app.agent = app::agent_here();
             match (id, query) {
                 (Some(citation), _) => {
                     let e = app.expand(&citation)?;
@@ -188,6 +189,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Forget { name } => {
             let root = find_store(cli.store, &cwd)?;
             let mut app = App::open(&root)?;
+            app.agent = app::agent_here();
             let f = app.forget(&name)?;
             if cli.json {
                 emit(serde_json::to_value(&f)?)?;
