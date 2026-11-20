@@ -906,12 +906,13 @@ impl App {
         // (5, 2026-11-10). `skip_resident` drops them from the ranked list, so fifty resident
         // blocks with the word took every candidate and a ring 2 note that had it too came
         // back as no hits. A visibility filter is applied inside the lexical query.
-        let mut result = if skip_resident {
-            self.index
-                .recall_visible(query, None, &opts, &NotResident)?
-        } else {
-            self.index.recall(query, None, &opts)?
-        };
+        let mut result = again_if_vanished(|| {
+            if skip_resident {
+                self.index.recall_visible(query, None, &opts, &NotResident)
+            } else {
+                self.index.recall(query, None, &opts)
+            }
+        })?;
         if self.agent && !self.resident_injected && ring.is_none() {
             result.caveats.push(
                 "rings 0 and 1 were searched as well: no hook in this project puts them into \
@@ -1138,6 +1139,27 @@ impl App {
         std::fs::metadata(self.store.db_path())
             .map(|m| m.len())
             .unwrap_or(0)
+    }
+}
+
+/// Run a recall again when a hit vanished between the ranking and the read of its block (L9,
+/// 2026-11-19): a `scan --full` in another process empties the index and fills it again,
+/// and a recall that ran into the middle failed. A few tries, a short wait between them; any
+/// other error is returned at once.
+pub fn again_if_vanished<T>(
+    mut f: impl FnMut() -> cyberbrain_core::Result<T>,
+) -> cyberbrain_core::Result<T> {
+    let mut tries = 0;
+    loop {
+        match f() {
+            Err(cyberbrain_core::Error::Index(msg))
+                if msg.contains("vanished during recall") && tries < 3 =>
+            {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(20 * tries));
+            }
+            other => return other,
+        }
     }
 }
 

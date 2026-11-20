@@ -2253,3 +2253,41 @@ fn a_copied_store_judges_its_rows_by_its_own_files() {
         "the original is untouched"
     );
 }
+
+/// L9 (2026-11-19): a recall while `scan --full` empties and refills the index failed with
+/// "hit … vanished during recall". The next try sees the index as the scan left it.
+#[test]
+fn a_hit_that_vanished_during_recall_is_asked_again() {
+    use crate::app::again_if_vanished;
+    let mut calls = 0;
+    let r: Result<u32, cyberbrain_core::Error> = again_if_vanished(|| {
+        calls += 1;
+        if calls == 1 {
+            Err(cyberbrain_core::Error::Index(
+                "hit r2-08ac9ee5c838 vanished during recall: Query returned no rows".into(),
+            ))
+        } else {
+            Ok(7)
+        }
+    });
+    assert_eq!(r.unwrap(), 7);
+    assert_eq!(calls, 2);
+
+    // Another error is not repeated, and a hit that keeps vanishing gives up.
+    let mut calls = 0;
+    let r: Result<u32, _> = again_if_vanished(|| {
+        calls += 1;
+        Err(cyberbrain_core::Error::Index("disk I/O error".into()))
+    });
+    assert!(r.is_err());
+    assert_eq!(calls, 1);
+    let mut calls = 0;
+    let r: Result<u32, _> = again_if_vanished(|| {
+        calls += 1;
+        Err(cyberbrain_core::Error::Index(
+            "hit x vanished during recall".into(),
+        ))
+    });
+    assert!(r.is_err());
+    assert!(calls <= 5);
+}
