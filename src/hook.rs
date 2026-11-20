@@ -100,8 +100,9 @@ pub fn run(event: HookEvent, store_root: &Path, stdin: &str) -> Result<HookOutpu
                 stdout: json!({
                     "systemMessage": format!(
                         "Cyberbrain Light: the context is being compacted. {} note(s) are in the \
-                         store and will be back at the next session start; anything learned in \
-                         this one and not written with `cbl write` will not.",
+                         store: rings 0 and 1 come back at the next session start, the rest \
+                         through `cbl recall`. Anything learned in this session and not written \
+                         with `cbl write` is gone.",
                         stats.notes
                     )
                 })

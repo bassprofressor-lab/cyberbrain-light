@@ -75,10 +75,18 @@ fn run_hook(event: cli::HookEvent, store: Option<std::path::PathBuf>) -> Result<
     Ok(())
 }
 
+/// Commands whose output is the answer, and print it under `-q` too (L20, 2026-11-19):
+/// `cbl -q status` printed nothing at all. `-q` quiets the report of a command that does
+/// something; recall always printed its hits.
+pub(crate) fn answers_under_quiet(cmd: &Cmd) -> bool {
+    matches!(cmd, Cmd::Status | Cmd::Doctor { .. } | Cmd::Recall { .. })
+}
+
 fn run(cli: Cli) -> Result<()> {
     let cwd = std::env::current_dir()?;
+    let quiet = cli.quiet && !answers_under_quiet(&cli.cmd);
     let say = |text: String| {
-        if !cli.quiet {
+        if !quiet {
             println!("{text}");
         }
     };

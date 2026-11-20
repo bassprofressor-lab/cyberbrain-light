@@ -2643,3 +2643,49 @@ fn an_error_says_each_thing_once_and_names_cbl() {
         .context("top");
     assert_eq!(crate::render::error_text(&chained), "top: outer: inner");
 }
+
+/// L20 (2026-11-19): small things at first contact. `cbl -q status` and `cbl -q doctor`
+/// printed nothing at all, `cbl help` was an unknown subcommand, `cbl init` made a `models/`
+/// directory for a model Light does not have, and the pre-compact message promised that all
+/// notes "will be back" at the next session start, where only rings 0 and 1 are.
+#[test]
+fn first_contact_says_what_is_the_case() {
+    use crate::cli::{Cli, Cmd};
+    use clap::Parser;
+    let parse = |args: &[&str]| Cli::try_parse_from(args).map(|c| c.cmd);
+    let e = parse(&["cbl", "help"]).unwrap_err();
+    assert_eq!(e.kind(), clap::error::ErrorKind::DisplayHelp, "{e}");
+    for (args, prints) in [
+        (&["cbl", "status"][..], true),
+        (&["cbl", "doctor"][..], true),
+        (
+            &[
+                "cbl", "write", "--ring", "2", "--kind", "bug", "--name", "x", "--body", "y",
+            ][..],
+            false,
+        ),
+        (&["cbl", "scan"][..], false),
+        (&["cbl", "forget", "x"][..], false),
+    ] {
+        let cmd: Cmd = parse(args).unwrap();
+        assert_eq!(crate::answers_under_quiet(&cmd), prints, "{args:?}");
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join(".cyberbrain");
+    App::init(&root, 8192).unwrap();
+    assert!(
+        !root.join("models").exists(),
+        "an empty models/ for no model"
+    );
+
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 0, "regel", "eine regel");
+    write(&mut app, 2, "wissen", "ein wissen");
+    drop(app);
+    let out = hook::run(HookEvent::PreCompact, &root, "{}").unwrap();
+    let v: Value = serde_json::from_str(&out.stdout).unwrap();
+    let msg = v["systemMessage"].as_str().unwrap();
+    assert!(!msg.contains("will be back"), "{msg}");
+    assert!(msg.contains("rings 0 and 1"), "{msg}");
+}

@@ -21,7 +21,7 @@ $ cbl recall --id r2-867ef2a8cd01     # the whole note behind a citation
 
 **`cbl write`** wrote one Markdown file into `notes/r2/` and indexed it. A note has a **ring** (how much it is trusted), a **kind** (`knowledge`, `bug`, `lesson`, `decision`, `reference`, `session`) and a **name**, a kebab-case slug that is unique in the store. Writing the same name again updates the note and keeps its id. `--body -` reads the body from standard input, which is easier for anything longer than a sentence.
 
-**`cbl recall`** searched rings 2 to 4 for the words you gave it and printed hits with a **citation** such as `r2-867ef2a8cd01`. The citation names a block, not a file, so it stays valid when the note around it grows.
+**`cbl recall`** searched the store for the words you gave it and printed hits with a **citation** such as `r2-867ef2a8cd01`. The citation names a block, not a file, so it stays valid when the note around it grows.
 
 **`cbl recall --id`** expanded a citation into the full note.
 

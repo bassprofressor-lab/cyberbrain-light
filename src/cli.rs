@@ -12,8 +12,7 @@ use std::path::PathBuf;
     long_about = "Cyberbrain Light: cited, trust-tiered memory for AI coding agents.\n\n\
                   Notes are plain Markdown in your repository. Search is lexical (SQLite \
                   FTS5) and every hit carries a citation that resolves back to the block it \
-                  came from. No model to place, no compliance subsystem, no network.",
-    disable_help_subcommand = true
+                  came from. No model to place, no compliance subsystem, no network."
 )]
 pub struct Cli {
     /// Store to operate on. Defaults to `.cyberbrain` found from the working directory
@@ -25,7 +24,8 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
-    /// Print less. Errors still go to stderr.
+    /// Print less: the report of write, scan, forget, init and install. Status, doctor and
+    /// recall print their answer all the same. Errors still go to stderr.
     #[arg(long, short, global = true)]
     pub quiet: bool,
 

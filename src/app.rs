@@ -578,8 +578,15 @@ impl App {
                 ..LightConfig::default()
             }
         };
+        let had_models = root.join("models").exists();
         let store = Store::create(root, cfg.resident_cap_tokens)
             .with_context(|| format!("creating the store at {}", root.display()))?;
+        // The core crate lays out the full product's store, models/ included. Light has no
+        // model; an empty directory it made for one only raised the question (L20,
+        // 2026-11-19). The full Cyberbrain creates it when it needs it.
+        if !had_models {
+            let _ = std::fs::remove_dir(store.models_dir());
+        }
         if !root.join(CONFIG_FILE).exists() {
             cfg.write(root)?;
         }
