@@ -49,8 +49,9 @@ pub enum Cmd {
         kind: Kind,
         #[arg(long)]
         name: String,
-        /// The note body. `-` reads it from standard input.
-        #[arg(long)]
+        /// The note body. `-` reads it from standard input. It may start with a hyphen
+        /// (a list, a `---` rule).
+        #[arg(long, allow_hyphen_values = true)]
         body: String,
         /// Comma-separated. On an existing note they replace its tags; left out, the tags
         /// stay. `trust:untrusted` and `src:` tags stay either way.

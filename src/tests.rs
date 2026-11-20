@@ -2594,3 +2594,29 @@ fn every_cargo_build_in_ci_is_locked_and_dependabot_watches_cargo() {
         );
     }
 }
+
+/// L18 (2026-11-19): a body starting with `-` (a Markdown list, a rule `---`) was taken for
+/// an option: "unexpected argument '---…' found".
+#[test]
+fn a_body_may_start_with_a_hyphen() {
+    use clap::Parser;
+    for body in ["- erster punkt\n- zweiter", "---\nring: 0", "-", "--force"] {
+        let cli = crate::cli::Cli::try_parse_from([
+            "cbl",
+            "write",
+            "--ring",
+            "2",
+            "--kind",
+            "knowledge",
+            "--name",
+            "liste",
+            "--body",
+            body,
+        ])
+        .unwrap_or_else(|e| panic!("{body:?}: {e}"));
+        match cli.cmd {
+            crate::cli::Cmd::Write { body: b, .. } => assert_eq!(b, body),
+            other => panic!("{other:?}"),
+        }
+    }
+}
