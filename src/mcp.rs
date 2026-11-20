@@ -216,7 +216,7 @@ impl Server {
                 "isError": false,
             })),
             Err(e) => Ok(json!({
-                "content": [{ "type": "text", "text": format!("{e:#}") }],
+                "content": [{ "type": "text", "text": crate::render::error_text(&e) }],
                 "isError": true,
             })),
         }

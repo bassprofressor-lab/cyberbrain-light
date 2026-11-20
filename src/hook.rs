@@ -59,8 +59,9 @@ pub fn run(event: HookEvent, store_root: &Path, stdin: &str) -> Result<HookOutpu
             // to the model, which then worked as if there were none. It is told now, briefly,
             // and the whole error chain goes to stderr for the human.
             let notes = vec![format!(
-                "no usable store at {}: {e:#}",
-                store_root.display()
+                "no usable store at {}: {}",
+                store_root.display(),
+                crate::render::error_text(&e)
             )];
             let is_store = store_root.join("notes").is_dir();
             if !is_store || event == HookEvent::PreCompact {

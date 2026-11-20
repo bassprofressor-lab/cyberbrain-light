@@ -243,3 +243,22 @@ pub fn marks(
     }
     out
 }
+
+/// An error and its causes as one line, each thing said once (L19, 2026-11-19). The store's
+/// errors carry their cause in their own text, and `{:#}` added it again, so a missing store
+/// was reported twice. And the core crate's advice names the full product's command, which
+/// is `cbl` here.
+pub fn error_text(e: &anyhow::Error) -> String {
+    let mut out = String::new();
+    for part in e.chain().map(|c| c.to_string()) {
+        if out.contains(&part) {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push_str(": ");
+        }
+        out.push_str(&part);
+    }
+    out.replace("`cyberbrain init`", "`cbl init`")
+        .replace("run cyberbrain init", "run cbl init")
+}

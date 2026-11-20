@@ -2620,3 +2620,26 @@ fn a_body_may_start_with_a_hyphen() {
         }
     }
 }
+
+/// L19 (2026-11-19): errors said everything twice and sent the user to a command they do
+/// not have: "… (run `cyberbrain init`): no notes/ directory here; … (run `cyberbrain
+/// init`)".
+#[test]
+fn an_error_says_each_thing_once_and_names_cbl() {
+    let e = App::open(Path::new("/nonexistent/.cyberbrain"))
+        .err()
+        .unwrap();
+    let text = crate::render::error_text(&e);
+    assert_eq!(
+        text.matches("no notes/ directory here").count(),
+        1,
+        "{text}"
+    );
+    assert!(text.contains("cbl init"), "{text}");
+    assert!(!text.contains("cyberbrain init"), "{text}");
+
+    let chained = anyhow::anyhow!("inner")
+        .context("outer: inner")
+        .context("top");
+    assert_eq!(crate::render::error_text(&chained), "top: outer: inner");
+}

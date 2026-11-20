@@ -35,7 +35,7 @@ fn main() -> ExitCode {
                 ))
             });
         if let Err(e) = outcome {
-            eprintln!("cbl hook: {e:#}");
+            eprintln!("cbl hook: {}", render::error_text(&e));
         }
         return ExitCode::SUCCESS;
     }
@@ -43,7 +43,7 @@ fn main() -> ExitCode {
     match run(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("cbl: {e:#}");
+            eprintln!("cbl: {}", render::error_text(&e));
             ExitCode::FAILURE
         }
     }
@@ -58,7 +58,7 @@ fn run_hook(event: cli::HookEvent, store: Option<std::path::PathBuf>) -> Result<
         Ok(r) => r,
         Err(e) => {
             if !e.to_string().starts_with("no store found") {
-                eprintln!("cbl {}: {e:#}", event.as_str());
+                eprintln!("cbl {}: {}", event.as_str(), render::error_text(&e));
             }
             return Ok(());
         }
