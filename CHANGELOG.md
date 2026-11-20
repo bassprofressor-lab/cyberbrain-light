@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
-## [0.2.5] - unreleased
+## [0.2.5] - 2026-11-20
 
 - **Release binaries get a build provenance attestation.** The checksum file is made in the
   same run as the binaries, so whoever could swap one could swap both. Releases from 0.2.5 on are
