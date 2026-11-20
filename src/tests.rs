@@ -2195,3 +2195,61 @@ fn a_setting_out_of_range_is_named_instead_of_crashing_or_finding_nothing() {
     std::fs::write(root.join("light.toml"), "k_lex = 200\nn = 20\n").unwrap();
     App::open(&root).expect("in range");
 }
+
+/// L8 (2026-11-19), case C: a note moved to another ring directory by hand. Its head still
+/// says ring 2, so it cannot be read where it is now, and its row goes with the old path.
+/// The scan said both "1 removed" and "kept in the index as it was".
+#[test]
+fn a_note_moved_by_hand_is_not_said_to_be_kept() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "gamma", "pinguin am südpol");
+    std::fs::rename(
+        root.join("notes/r2/gamma.md"),
+        root.join("notes/r3/gamma.md"),
+    )
+    .unwrap();
+    let r = app.scan(false).unwrap();
+    assert_eq!(r.removed, 1);
+    let line = r
+        .skipped
+        .iter()
+        .find(|s| s.contains("gamma"))
+        .expect("named");
+    assert!(!line.contains("kept in the index"), "{line}");
+    assert!(line.contains("not in the index"), "{line}");
+}
+
+/// L8: a copied store. The index holds the original's absolute paths; a note deleted in the
+/// copy was counted as hidden by `.cyberbrainignore` while the original still had the file.
+#[test]
+fn a_copied_store_judges_its_rows_by_its_own_files() {
+    let (d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "eins", "erste notiz");
+    write(&mut app, 2, "zwei", "zweite notiz");
+    drop(app);
+    let copy = d.path().join("kopie/.cyberbrain");
+    std::fs::create_dir_all(&copy).unwrap();
+    for sub in ["notes/r0", "notes/r1", "notes/r2", "notes/r3", "notes/r4"] {
+        std::fs::create_dir_all(copy.join(sub)).unwrap();
+    }
+    for f in [
+        "light.toml",
+        "cyberbrain.db",
+        "notes/r2/eins.md",
+        "notes/r2/zwei.md",
+    ] {
+        std::fs::copy(root.join(f), copy.join(f)).unwrap();
+    }
+    std::fs::remove_file(copy.join("notes/r2/zwei.md")).unwrap();
+
+    let mut app = App::open(&copy).unwrap();
+    let r = app.scan(false).unwrap();
+    assert_eq!((r.removed, r.ignored), (1, 0), "{:?}", r.skipped);
+    assert!(app.doctor(false).unwrap().findings.is_empty());
+    assert!(
+        root.join("notes/r2/zwei.md").is_file(),
+        "the original is untouched"
+    );
+}

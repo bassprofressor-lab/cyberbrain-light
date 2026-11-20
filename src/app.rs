@@ -740,6 +740,7 @@ impl App {
         };
 
         let mut seen: HashSet<NoteId> = HashSet::new();
+        let mut unreadable: Vec<(PathBuf, String)> = Vec::new();
         // The id each readable listed file carries, by path.
         let mut read_ids: std::collections::HashMap<PathBuf, NoteId> = Default::default();
         let mut names: std::collections::HashMap<String, PathBuf> = Default::default();
@@ -747,10 +748,8 @@ impl App {
             let mut note = match self.store.read_path(&entry.path) {
                 Ok(n) => n,
                 Err(e) => {
-                    report.skipped.push(format!(
-                        "{}: {e} (kept in the index as it was; fix the file and scan again)",
-                        entry.path.display()
-                    ));
+                    // Said after the rows are settled, by what became of this file's row.
+                    unreadable.push((self.on_disk(&entry.path), e.to_string()));
                     continue;
                 }
             };
@@ -847,7 +846,7 @@ impl App {
             if seen.contains(&record.front.id) {
                 continue;
             }
-            let path = self.on_disk(&record.path);
+            let path = self.home_of(&record);
             // Listed and unreadable: kept until it can be read (L3, 2026-10-31). Listed and
             // read, but with another id: this row's note is gone, whatever took its file
             // (L3, 2026-11-19).
@@ -863,6 +862,27 @@ impl App {
             } else {
                 report.removed += 1;
             }
+        }
+
+        // What the scan says about a file it could not read follows what became of its row
+        // (L8, 2026-11-19): a note moved to another ring by hand cannot be read there, and
+        // its row left with the old path. "Kept in the index" was said all the same.
+        let kept: HashSet<PathBuf> = self
+            .index
+            .notes()?
+            .iter()
+            .map(|r| self.home_of(r))
+            .collect();
+        for (path, e) in unreadable {
+            report.skipped.push(format!(
+                "{} ({}; fix the file and scan again)",
+                shorter(&e, &path),
+                if kept.contains(&path) {
+                    "kept in the index as it was"
+                } else {
+                    "not in the index"
+                }
+            ));
         }
 
         report.stats = Some(self.index.stats()?);
@@ -1041,9 +1061,7 @@ impl App {
             .index
             .notes()?
             .into_iter()
-            .filter(|r| {
-                !on_disk.contains(&r.front.id) && !unreadable.contains(&self.on_disk(&r.path))
-            })
+            .filter(|r| !on_disk.contains(&r.front.id) && !unreadable.contains(&self.home_of(r)))
             .count();
         if !unreadable.is_empty() {
             findings.push(format!(
@@ -1087,13 +1105,23 @@ impl App {
     /// that is gone: its file is missing, is the file `claimant` was read from, or carries
     /// another id. An unreadable file keeps its row, as everywhere in scan.
     fn row_is_stale(&self, row: &cyberbrain_index::NoteRecord, claimant: &Path) -> bool {
-        let path = self.on_disk(&row.path);
+        let path = self.home_of(row);
         if path == self.on_disk(claimant) || !path.is_file() {
             return true;
         }
         self.store
             .read_path(&path)
             .is_ok_and(|n| n.front.id != row.front.id)
+    }
+
+    /// Where the note of an index row lives in this store: its ring directory and name, the
+    /// only place `read_path` accepts it (L8, 2026-11-19). The path column is what the writer
+    /// saw, absolute, and in a copied or moved store it names the original's file: a note
+    /// deleted in the copy counted as hidden by `.cyberbrainignore` while the original kept it.
+    fn home_of(&self, row: &cyberbrain_index::NoteRecord) -> PathBuf {
+        self.store
+            .note_path(row.front.ring, &row.front.name)
+            .unwrap_or_else(|_| self.on_disk(&row.path))
     }
 
     /// A path from the listing or from the index, as the file it names. The index may hold
@@ -1110,6 +1138,17 @@ impl App {
         std::fs::metadata(self.store.db_path())
             .map(|m| m.len())
             .unwrap_or(0)
+    }
+}
+
+/// An error about `path` as one line that names the path once: the store's errors name it
+/// already, and `scan` printed it twice.
+fn shorter(e: &str, path: &Path) -> String {
+    let shown = path.display().to_string();
+    if e.contains(&shown) {
+        e.to_string()
+    } else {
+        format!("{shown}: {e}")
     }
 }
 
