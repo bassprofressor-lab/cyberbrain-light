@@ -1032,13 +1032,13 @@ impl App {
         // A note is replaced when it names its successor or another note names it in
         // `supersedes`.
         let now = jiff::Timestamp::now();
-        let superseded_by = note.front.superseded_by.clone().or_else(|| {
-            self.index.notes().ok().and_then(|all| {
-                all.into_iter()
-                    .find(|r| r.front.supersedes.contains(&note.front.name))
-                    .map(|r| r.front.name)
-            })
-        });
+        // One query over the notes that name a successor, the one recall asks (L27,
+        // 2026-11-19): before, every index row was loaded for this, and a successor whose
+        // `valid_from` lay ahead counted already, where recall did not count it.
+        let superseded_by = match note.front.superseded_by.clone() {
+            Some(s) => Some(s),
+            None => self.index.superseded()?.remove(&note.front.name),
+        };
         Ok(Expanded {
             citation: cit.to_string(),
             name: record.front.name.clone(),

@@ -2689,3 +2689,48 @@ fn first_contact_says_what_is_the_case() {
     assert!(!msg.contains("will be back"), "{msg}");
     assert!(msg.contains("rings 0 and 1"), "{msg}");
 }
+
+/// L27 (2026-11-19): expanding a citation loaded every index row to ask whether another
+/// note replaces this one (9.5 ms at 1,000 notes, 56.7 ms at 10,000). It is one query now,
+/// the one recall asks, and so the two agree: a successor that is not valid yet does not
+/// replace the note before its time.
+#[test]
+fn expanding_a_citation_asks_for_a_successor_as_recall_does() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "alt", "der alte weg zum hafen");
+    for (name, from) in [
+        ("neu", "2026-01-01T00:00:00Z"),
+        ("kuenftig", "2099-01-01T00:00:00Z"),
+    ] {
+        let target = if name == "neu" { "alt" } else { "noch-alt" };
+        if name == "kuenftig" {
+            write(&mut app, 2, "noch-alt", "der jetzige weg zur werft");
+        }
+        std::fs::write(
+            root.join(format!("notes/r2/{name}.md")),
+            format!(
+                "---\nid: {}\nname: {name}\nring: 2\nkind: knowledge\n\
+                 created: 2026-01-01T00:00:00Z\nupdated: 2026-01-01T00:00:00Z\n\
+                 supersedes:\n- {target}\nvalid_from: {from}\n---\n\nersetzt {target}\n",
+                cyberbrain_core::types::NoteId::generate()
+            ),
+        )
+        .unwrap();
+    }
+    app.scan(false).unwrap();
+
+    let hit = |q: &str| app.recall(q, 5, None).unwrap().hits.remove(0);
+    let alt = hit("hafen");
+    let e = app.expand(&alt.citation.to_string()).unwrap();
+    assert_eq!(e.superseded_by.as_deref(), Some("neu"));
+    assert_eq!(alt.superseded_by.as_deref(), Some("neu"));
+
+    let jetzt = hit("werft");
+    let e = app.expand(&jetzt.citation.to_string()).unwrap();
+    assert_eq!(
+        jetzt.superseded_by, None,
+        "recall: not replaced before 2099"
+    );
+    assert_eq!(e.superseded_by, None, "the expansion said otherwise");
+}
