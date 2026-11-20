@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 
 ## [Unreleased]
 
-## [0.2.4] - unreleased
+## [0.2.4] - 2026-11-20
 
 Fixes from the review of 2026-11-19 (findings L3 to L29 of its Light part).
 
