@@ -450,7 +450,18 @@ impl App {
             body: req.body,
             path: PathBuf::new(),
         };
-        let bytes = frontmatter::render(&note.front, &note.body)?.len();
+        // Everything that can refuse this write is asked before the file is touched (L3,
+        // 2026-11-19). The store's own checks (ring, cap, a name in another ring) come first;
+        // then the index: a row under this name with another id belongs to a note whose file
+        // is gone or now carries that other id, since this name resolves to no file or to the
+        // one just read. Before, that row made `upsert_note` refuse after the new file was
+        // already written, and the deleted text stayed findable while the new one was not.
+        let bytes = self.store.validate_write(&note)?.1.len();
+        if let Some(row) = self.index.note_by_name(&name)?
+            && row.front.id != note.front.id
+        {
+            self.index.delete_note(&row.front.id)?;
+        }
         let path = self.store.write(&note)?;
         let note = Note { path, ..note };
 
@@ -505,6 +516,8 @@ impl App {
         };
 
         let mut seen: HashSet<NoteId> = HashSet::new();
+        // The id each readable listed file carries, by path.
+        let mut read_ids: std::collections::HashMap<PathBuf, NoteId> = Default::default();
         let mut names: std::collections::HashMap<String, PathBuf> = Default::default();
         for entry in &listing.entries {
             let mut note = match self.store.read_path(&entry.path) {
@@ -517,6 +530,7 @@ impl App {
                     continue;
                 }
             };
+            read_ids.insert(self.on_disk(&entry.path), note.front.id);
             if !seen.insert(note.front.id) {
                 report.skipped.push(format!(
                     "{}: id {} is already used by another note; ids are unique",
@@ -561,9 +575,22 @@ impl App {
             }
             let (blocks, oversized) = blocks_of(&note, MAX_BLOCK_TOKENS);
             report.oversized += oversized.len();
-            // The index can still hold the name under another id, from a file listed after
-            // this one or gone since: skipped and named as well, and the scan goes on.
-            let outcome = match self.index.upsert_note(&note, &blocks, None) {
+            // The index can still hold the name under another id. When that row's note is
+            // gone — its file deleted, or the file now carries this note's id (L3,
+            // 2026-11-19) — the row goes and this note takes its place. When the other
+            // note is still on disk under its id, it is a real clash: skipped and named,
+            // and the scan goes on.
+            let mut outcome = self.index.upsert_note(&note, &blocks, None);
+            if let Err(cyberbrain_core::Error::Index(msg)) = &outcome
+                && msg.contains("is already used by")
+                && let Some(row) = self.index.note_by_name(&note.front.name)?
+                && self.row_is_stale(&row, &entry.path)
+            {
+                self.index.delete_note(&row.front.id)?;
+                report.removed += 1;
+                outcome = self.index.upsert_note(&note, &blocks, None);
+            }
+            let outcome = match outcome {
                 Ok(o) => o,
                 Err(cyberbrain_core::Error::Index(msg)) if msg.contains("is already used by") => {
                     report.skipped.push(format!(
@@ -597,11 +624,17 @@ impl App {
                 continue;
             }
             let path = self.on_disk(&record.path);
-            if listed.contains(&path) {
+            // Listed and unreadable: kept until it can be read (L3, 2026-10-31). Listed and
+            // read, but with another id: this row's note is gone, whatever took its file
+            // (L3, 2026-11-19).
+            if listed.contains(&path) && read_ids.get(&path).is_none_or(|id| *id == record.front.id)
+            {
                 continue;
             }
             self.index.delete_note(&record.front.id)?;
-            if path.is_file() {
+            if listed.contains(&path) {
+                report.removed += 1;
+            } else if path.is_file() {
                 report.ignored += 1;
             } else {
                 report.removed += 1;
@@ -804,6 +837,19 @@ impl App {
             findings,
             repaired,
         })
+    }
+
+    /// Whether an index row that holds a name another note now claims belongs to a note
+    /// that is gone: its file is missing, is the file `claimant` was read from, or carries
+    /// another id. An unreadable file keeps its row, as everywhere in scan.
+    fn row_is_stale(&self, row: &cyberbrain_index::NoteRecord, claimant: &Path) -> bool {
+        let path = self.on_disk(&row.path);
+        if path == self.on_disk(claimant) || !path.is_file() {
+            return true;
+        }
+        self.store
+            .read_path(&path)
+            .is_ok_and(|n| n.front.id != row.front.id)
     }
 
     /// A path from the listing or from the index, as the file it names. The index may hold

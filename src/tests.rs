@@ -1920,3 +1920,94 @@ fn an_unreadable_resident_note_is_named_to_the_model() {
     assert!(ctx.contains("r1/kaputt"), "the model is not told:\n{ctx}");
     assert!(ctx.contains("unreadable"), "{ctx}");
 }
+
+// ----- 0.2.4: findings of the review of 2026-11-19 ------------------------------------
+
+/// A note's file put there by hand, with a fresh id: what a person does who deletes a note
+/// and writes it again in an editor, or restores an older copy.
+fn hand_written(root: &Path, ring: u8, name: &str, body: &str) -> cyberbrain_core::types::NoteId {
+    let id = cyberbrain_core::types::NoteId::generate();
+    std::fs::write(
+        root.join(format!("notes/r{ring}/{name}.md")),
+        format!(
+            "---\nid: {id}\nname: {name}\nring: {ring}\nkind: knowledge\n\
+             created: 2026-11-19T00:00:00Z\nupdated: 2026-11-19T00:00:00Z\n---\n\n{body}\n"
+        ),
+    )
+    .unwrap();
+    id
+}
+
+/// L3 (2026-11-19), case A: a note deleted by hand and written again under its name. The
+/// write failed on the index's name check after the file was on disk, the deleted text
+/// stayed findable and the new one was not, and neither `scan` nor `doctor --fix` healed it.
+#[test]
+fn a_note_deleted_by_hand_and_written_again_replaces_the_old_one() {
+    let (_d, root) = store(8192);
+    let mut app = App::open(&root).unwrap();
+    write(&mut app, 2, "alpha", "erste fassung giraffe");
+    std::fs::remove_file(root.join("notes/r2/alpha.md")).unwrap();
+
+    let w = app
+        .write_note(WriteRequest {
+            ring: Ring::try_from(2).unwrap(),
+            kind: NoteKind::Knowledge,
+            name: "alpha".into(),
+            body: "zweite fassung nashorn".into(),
+            tags: vec![],
+        })
+        .expect("the write goes through");
+    assert!(w.created);
+    assert_eq!(app.recall("nashorn", 5, None).unwrap().hits.len(), 1);
+    assert!(
+        app.recall("giraffe", 5, None).unwrap().hits.is_empty(),
+        "the deleted text is still found"
+    );
+    assert!(app.doctor(false).unwrap().findings.is_empty());
+}
+
+/// L3, case B: the new file comes by hand, with a new id. `scan` kept the old row because
+/// its path was still listed, and skipped the new note on the name; `doctor --fix` said
+/// "repaired" and changed nothing.
+#[test]
+fn a_note_replaced_by_hand_with_a_new_id_is_picked_up_by_scan_and_doctor() {
+    for repair in ["scan", "doctor", "write"] {
+        let (_d, root) = store(8192);
+        let mut app = App::open(&root).unwrap();
+        write(&mut app, 2, "beta", "erste fassung giraffe");
+        std::fs::remove_file(root.join("notes/r2/beta.md")).unwrap();
+        let new_id = hand_written(&root, 2, "beta", "zweite fassung nashorn");
+
+        match repair {
+            "scan" => {
+                let r = app.scan(false).unwrap();
+                assert!(r.skipped.is_empty(), "{:?}", r.skipped);
+            }
+            "doctor" => {
+                let d = app.doctor(false).unwrap();
+                assert!(!d.findings.is_empty(), "doctor sees nothing wrong");
+                app.doctor(true).unwrap();
+            }
+            _ => write(&mut app, 2, "beta", "dritte fassung nashorn"),
+        }
+        assert_eq!(
+            app.recall("nashorn", 5, None).unwrap().hits.len(),
+            1,
+            "{repair}: the new note is not found"
+        );
+        assert!(
+            app.recall("giraffe", 5, None).unwrap().hits.is_empty(),
+            "{repair}: the deleted text is still found"
+        );
+        assert_eq!(
+            app.index.note_by_name("beta").unwrap().unwrap().front.id,
+            new_id,
+            "{repair}"
+        );
+        assert!(
+            app.doctor(false).unwrap().findings.is_empty(),
+            "{repair}: {:?}",
+            app.doctor(false).unwrap().findings
+        );
+    }
+}
