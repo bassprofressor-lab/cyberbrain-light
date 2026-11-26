@@ -29,7 +29,7 @@ cyberbrain-index = "=0.10.7"
 # The matcher behind `.cyberbrainignore`, already in the tree through cyberbrain-core: `cbl
 # write` asks it whether a name would be hidden (L11, 2026-11-19).
 ignore = "0.4.33"
-jiff = { version = "0.2.35", features = ["serde"] }
+jiff = { version = "1.0.2", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 # `preserve_order`: `cbl install` rewrites a settings.json that belongs to the user, and
 # keeps its keys where the user put them.
